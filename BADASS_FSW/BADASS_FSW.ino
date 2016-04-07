@@ -9,12 +9,19 @@
 #include <Servo.h> 
 #include <SPI.h>
 #include <SD.h>
+#include <Adafruit_MCP9808.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_ADS1015.h>
+
 
 #include "CCSDS.h"
 #include "CCSDS_xbee.h"
 
 
 #define SD_PIN 53
+#define SEALEVELPRESSURE_HPA (1013.25)
+#define ADS_CURRENT_PIN 2
+#define ADS_VOLTAGE_PIN 3
 
 // ***********************************
 // Initalizations
@@ -27,6 +34,16 @@ Servo servo1;
 
 // initalize the BNO
 Adafruit_BNO055 bno = Adafruit_BNO055(0,0x29);
+
+// Create the MCP9808 temperature sensor object
+Adafruit_MCP9808 tempsensor1 = Adafruit_MCP9808();
+Adafruit_MCP9808 tempsensor2 = Adafruit_MCP9808();
+
+// Declare the BME temp/pressure/humidity sensor
+Adafruit_BME280 bme;
+
+// Declare the ADC
+Adafruit_ADS1015 ads;
 
 ////// Telemetry 
 // these values define positions in a bitfield which control wether or 
@@ -45,10 +62,18 @@ uint32_t cycle_time_MASK =   0x00000400;
 uint32_t cmd_rcvd_MASK =     0x00000800;
 uint32_t desired_cyc_time_MASK = 0x00001000;
 uint32_t cmdecho_MASK =      0x00001000;
+uint32_t temp1_MASK =        0x00002000;
+uint32_t temp2_MASK =        0x00004000;
+uint32_t tempbme_MASK =      0x00008000;
+uint32_t pres_MASK =         0x00010000;
+uint32_t alt_MASK =          0x00020000;
+uint32_t humid_MASK =        0x00040000;
+uint32_t current_MASK =      0x00080000;
+uint32_t voltage_MASK =      0x00100000;
 
 // this bitfield, and the masks above, define which values get output in
 //  telemetry 
-uint32_t tlmctrl = 0b0000111110000111;
+uint32_t tlmctrl = 0b0111111110000111;
 
 ////// Commanding 
 // these values define the fcncode corresponding to each command
@@ -60,6 +85,7 @@ uint8_t set_servoenable_CMD = 0x05;
 uint8_t set_rwenable_CMD = 0x06;
 uint8_t requesttlm_CMD = 0x07;
 uint8_t sendtestpkt_CMD = 0x08;
+uint8_t settlmaddr_CMD = 0x09;
 
 // Initial parameters
 //  These parameters control program execution and may be changed via 
@@ -82,9 +108,8 @@ imu::Vector<3> x_axis = imu::Vector<3>( 1.0, 0.0, 0.0);
 imu::Vector<3> y_axis = imu::Vector<3>( 0.0, 1.0, 0.0);
 imu::Vector<3> z_axis = imu::Vector<3>( 0.0, 0.0, 1.0);
 
-// delete these
-int prevmillis_tmp = 0;
-int prev_cycle_start_time = 0;
+// xbee address to sent telemetry to
+uint8_t tlm_addr = 2;
 
 // Hardcoded parameters
 #define CMD_HDR_LEN 8
@@ -111,6 +136,11 @@ float tmp_float = 0.0;
 float tmp_float1 = 0.0;
 float tmp_float2 = 0.0;
 float tmp_float3 = 0.0;
+float tempbme = 0.0;
+float pres = 0.0;
+float alt = 0.0;
+float humid = 0.0;
+int16_t raw_current, raw_voltage;
 
 uint16_t xbee_addr = 01;
 uint16_t xbee_PanID = 0x0B0B;
@@ -124,6 +154,9 @@ int cycle_time;
 int fcncode = 0;
 int APID = 0;
 int PktType = 0;
+
+float temp1 = 0;
+float temp2 = 0;
 
 sensors_event_t event; 
 
@@ -451,8 +484,88 @@ void compileTLM(){
     Serial.print(" FcnCodeEcho: ");
     Serial.print(fcncode);
   }
-
+  
   logFile.print(fcncode);
+  logFile.print(", ");
+   
+  if(tlmctrl & temp1_MASK){
+    tlm_pos = addFloatToTlm(temp1, telemetry_data, tlm_pos);
+
+    Serial.print(" temp1: ");
+    Serial.print(temp1);
+  }
+  
+  logFile.print(temp1);
+  logFile.print(", ");
+  
+  if(tlmctrl & temp2_MASK){
+    tlm_pos = addFloatToTlm(temp2, telemetry_data, tlm_pos);
+
+    Serial.print(" temp2: ");
+    Serial.print(temp2);
+  }
+  
+  logFile.print(temp2);
+  logFile.print(", ");
+  
+  if(tlmctrl & tempbme_MASK){
+    tlm_pos = addFloatToTlm(tempbme, telemetry_data, tlm_pos);
+
+    Serial.print(" tempbme: ");
+    Serial.print(tempbme);
+  }
+  
+  logFile.print(tempbme);
+  logFile.print(", ");
+  
+  if(tlmctrl & pres_MASK){
+    tlm_pos = addFloatToTlm(pres, telemetry_data, tlm_pos);
+
+    Serial.print(" pres: ");
+    Serial.print(pres);
+  }
+  
+  logFile.print(pres);
+  logFile.print(", ");
+  
+  if(tlmctrl & alt_MASK){
+    tlm_pos = addFloatToTlm(alt, telemetry_data, tlm_pos);
+
+    Serial.print(" alt: ");
+    Serial.print(alt);
+  }
+  
+  logFile.print(alt);
+  logFile.print(", ");
+  
+  if(tlmctrl & humid_MASK){
+    tlm_pos = addFloatToTlm(humid, telemetry_data, tlm_pos);
+
+    Serial.print(" humid: ");
+    Serial.print(humid);
+  }
+
+  logFile.print(humid);
+  logFile.print(", ");
+  
+  if(tlmctrl & current_MASK){
+    tlm_pos = addIntToTlm(raw_current, telemetry_data, tlm_pos);
+
+    Serial.print(" current: ");
+    Serial.print(raw_current);
+  }
+  
+  logFile.print(raw_current);
+  logFile.print(", ");
+  
+  if(tlmctrl & voltage_MASK){
+    tlm_pos = addIntToTlm(raw_voltage, telemetry_data, tlm_pos);
+
+    Serial.print(" voltage: ");
+    Serial.print(raw_voltage);
+  }
+  
+  logFile.print(raw_voltage);
   logFile.print(", ");
   
   if(tlmctrl){
@@ -538,6 +651,11 @@ void cmdResponse(){
       }
       else if(fcncode == sendtestpkt_CMD){
         Serial.print(" Sending test packet");
+      }
+      else if(fcncode == settlmaddr_CMD){
+        pkt_pos = extractFromTlm(tlm_addr, incomingByte, pkt_pos);
+        Serial.print(" Setting tlm addr:");
+        Serial.print(tlm_addr);
       }
 }
 
@@ -627,6 +745,15 @@ void setup() {
     Serial.println(filename);
   }
 
+  if (!tempsensor1.begin(0x1A)) {
+    Serial.println("Couldn't find MCP9808 0x1A!");
+  }
+  if (!tempsensor2.begin(0x1B)) {
+    Serial.println("Couldn't find MCP9808 0x1B!");
+  }
+  if (!bme.begin(0x76)) {
+    Serial.println("Could not find a valid BME280 sensor, check wiring!");
+  }
   // initalize xbee
   InitXBee(xbee_addr, xbee_PanID, Serial3);
 
@@ -678,6 +805,16 @@ void loop() {
 
     }
 
+    temp1 = tempsensor1.readTempC();
+    temp2 = tempsensor2.readTempC();
+    tempbme = bme.readTemperature();
+    pres = bme.readPressure() / 100.0F;
+    alt = bme.readAltitude(SEALEVELPRESSURE_HPA);
+    humid = bme.readHumidity();
+   
+    raw_current = ads.readADC_SingleEnded(ADS_CURRENT_PIN);
+    raw_voltage = ads.readADC_SingleEnded(ADS_VOLTAGE_PIN);
+    
     // get calibration status
     bno.getCalibration(&sys_cal, &gyro_cal, &accel_cal, &mag_cal);
 
@@ -713,7 +850,7 @@ void loop() {
 
   compileTLM();
 
-  sendData( (uint8_t) 2, telemetry_data, tlm_pos);
+  sendData( tlm_addr, telemetry_data, tlm_pos);
   //sendData( (uint8_t) 3, telemetry_data, tlm_pos);
   }
 }
