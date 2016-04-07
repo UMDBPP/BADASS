@@ -672,6 +672,7 @@ void calcPtErr(imu::Vector<3> target_body, imu::Vector<3> x_axis, imu::Vector<3>
       el = - el;
     }
 }
+  char filename[16]; // make it long enough to hold your longest file name, plus a null terminator
 
 // ***********************************
 // Setup
@@ -722,7 +723,6 @@ void setup() {
   }
 
   // find the next free filename
-  char filename[16]; // make it long enough to hold your longest file name, plus a null terminator
   int n = 0;
   do{
     snprintf(filename, sizeof(filename), "data%03d.txt", n); // includes a three-digit sequence number in the file name
@@ -774,7 +774,11 @@ void loop() {
   // only start next cycle if we've waited long enough
   if(cycle_time > desiredcyclestime){
     cycle_start_time = millis();
-
+    
+   logFile = SD.open(filename, FILE_WRITE);
+   logFile.write(cycle_start_time);
+   logFile.write(", ");
+   
     // command handling
     bytes_available = Serial.available();
     if (bytes_available > 8) {
@@ -852,5 +856,8 @@ void loop() {
 
   sendData( tlm_addr, telemetry_data, tlm_pos);
   //sendData( (uint8_t) 3, telemetry_data, tlm_pos);
+  logFile.println();
+  logFile.close();
+
   }
 }
