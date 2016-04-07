@@ -44,7 +44,5 @@ function [APID, SecHdr, PktType, CCSDSVer, SeqCnt, SegFlag, PktLen] = ExtractPri
     else
         PktLen = typecast(arr(5:6),'uint16');
     end
-    
-
 
 end
