@@ -17,7 +17,7 @@
 /* Shift 'value' up by 'shift' and write to those bits in 'word' that
 ** are specified by 'mask'.  Other bits in 'word' are unchanged.   */
 #define CCSDS_WR_BITS(word,mask,shift,value) \
-   ((word) = (uint16)(((word) & ~mask) | (((value) & (mask >> shift)) << shift)))
+   ((word) = (uint16_t)(((word) & ~mask) | (((value) & (mask >> shift)) << shift)))
 /**********************************************************************
 ** Macros for reading and writing the fields in a CCSDS header.  All
 ** of the macros are used in a similar way:
@@ -89,18 +89,18 @@
 #define CCSDS_WR_SEC_HDR_SUBSEC(shdr, value) shdr.Time[4] = ((value>>8)  & 0xFF),  \
                                              shdr.Time[5] = ((value)     & 0xFF)
 
-#define CCSDS_RD_SEC_HDR_SUBSEC(shdr)        (((uint32)shdr.Time[4]) << 8)  | \
-                                             ((uint32)shdr.Time[5])
+#define CCSDS_RD_SEC_HDR_SUBSEC(shdr)        (((uint32_t)shdr.Time[4]) << 8)  | \
+                                             ((uint32_t)shdr.Time[5])
 
 #define CCSDS_WR_SEC_HDR_SEC(shdr, value)    shdr.Time[0] = ((value>>24) & 0xFF),  \
                                              shdr.Time[1] = ((value>>16) & 0xFF),  \
                                              shdr.Time[2] = ((value>>8)  & 0xFF),  \
                                              shdr.Time[3] = ((value)     & 0xFF)
 
-#define CCSDS_RD_SEC_HDR_SEC(shdr)           (((uint32)shdr.Time[0]) << 24) | \
-                                             (((uint32)shdr.Time[1]) << 16) | \
-                                             (((uint32)shdr.Time[2]) << 8)  | \
-                                             ((uint32)shdr.Time[3])
+#define CCSDS_RD_SEC_HDR_SEC(shdr)           (((uint32_t)shdr.Time[0]) << 24) | \
+                                             (((uint32_t)shdr.Time[1]) << 16) | \
+                                             (((uint32_t)shdr.Time[2]) << 8)  | \
+                                             ((uint32_t)shdr.Time[3])
                                              
 /**********************************************************************
 ** Macros for extracting fields from a stream ID.  All of the macros

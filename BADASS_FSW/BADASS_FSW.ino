@@ -13,10 +13,7 @@
 #include <Adafruit_BME280.h>
 #include <Adafruit_ADS1015.h>
 
-
-#include "CCSDS.h"
 #include "CCSDS_xbee.h"
-
 
 #define SD_PIN 53
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -73,7 +70,7 @@ uint32_t voltage_MASK =      0x00100000;
 
 // this bitfield, and the masks above, define which values get output in
 //  telemetry 
-uint32_t tlmctrl = 0b0111111110000111;
+uint32_t tlmctrl = 0b0000000000000111;
 
 ////// Commanding 
 // these values define the fcncode corresponding to each command
@@ -92,10 +89,10 @@ uint8_t settlmaddr_CMD = 0x09;
 //    commands during execution
 
 // execution rate of the program
-int desiredcyclestime = 2000; // [ms]
+uint16_t desiredcyclestime = 2000; // [ms]
 
 // command the servo
-bool cmd_servo_flag = false;
+bool cmd_servo_flag = true;
 
 // target in the NED frame
 imu::Vector<3> target_ned = imu::Vector<3>(1.0, 0.0, 0.0);
@@ -121,13 +118,11 @@ uint8_t tlm_addr = 2;
 int cycle_start_time = 0;
 int servo_cmd = 0;
 uint8_t incomingByte[100];
-uint8_t bytes_available = 0;
+int bytesread = 0;
 uint8_t tlm_pos = 0;
 uint8_t telemetry_data[200];
 uint16_t tlm_seq_cnt = 0;
-
-CCSDS_TlmPkt_t TlmHeader;
-CCSDS_CmdPkt_t CmdHeader;
+int pkt_type = 0;
 
 uint8_t tmp_uint8 = 0;
 uint8_t tmp_uint16 = 0;
@@ -151,7 +146,7 @@ int i = 0;
 float az = 0, el = 0;
 int cycle_time;
 
-int fcncode = 0;
+uint8_t fcncode = 0;
 int APID = 0;
 int PktType = 0;
 
@@ -219,29 +214,16 @@ imu::Vector<3> normtoplane(imu::Vector<3> NormVec, imu::Vector<3> Tgt) {
 }
     
 void compileTLM(){
-  tlm_pos = 0;
   
   tlm_seq_cnt++;
   
-  // create header
-  CCSDS_WR_APID(TlmHeader.PriHdr,2);
-  CCSDS_WR_SHDR(TlmHeader.PriHdr,1);
-  CCSDS_WR_TYPE(TlmHeader.PriHdr,0);
-  CCSDS_WR_VERS(TlmHeader.PriHdr,0);
-  CCSDS_WR_SEQ(TlmHeader.PriHdr,tlm_seq_cnt);
-  CCSDS_WR_SEQFLG(TlmHeader.PriHdr,00);
-  CCSDS_WR_SEC_HDR_SEC(TlmHeader.SecHdr,millis()/1000L);
-  CCSDS_WR_SEC_HDR_SUBSEC(TlmHeader.SecHdr,millis() % 1000L);
-  
-  tlm_pos = 12;
-
+  tlm_pos = 0;
   // telemetry compilation
    if(tlmctrl & tlmctrl_MASK){
       tlm_pos = addIntToTlm(tlmctrl, telemetry_data, tlm_pos);
       
-      Serial.print(" Set tlmctrl: ");
+      Serial.print(" tlmctrl: ");
       Serial.print(tlmctrl);
-      
 
     }
     
@@ -253,7 +235,7 @@ void compileTLM(){
     tlm_pos = addFloatToTlm( target_ned(1), telemetry_data, tlm_pos);
     tlm_pos = addFloatToTlm( target_ned(2), telemetry_data, tlm_pos);
     
-    Serial.print(" Set target_ned: ");
+    Serial.print(" target_ned: ");
     Serial.print(target_ned(0));
     Serial.print(" ");
     Serial.print(target_ned(1));
@@ -459,15 +441,6 @@ void compileTLM(){
   logFile.print(cycle_time);
   logFile.print(", ");
     
-  if(tlmctrl & cmd_rcvd_MASK){
-    
-    Serial.print(" Rcvd: ");
-    for(i = 0; i < bytes_available; i++){
-      Serial.print(incomingByte[i]);
-      Serial.print(" ");
-    }
-  }
-
   if(tlmctrl & desired_cyc_time_MASK){
     tlm_pos = addIntToTlm(desiredcyclestime, telemetry_data, tlm_pos);
 
@@ -567,24 +540,26 @@ void compileTLM(){
   
   logFile.print(raw_voltage);
   logFile.print(", ");
+
+   // if(tlmctrl & cmd_rcvd_MASK){
+    
+   // Serial.print(" Rcvd: ");
+    //for(i = 0; i < bytes_available; i++){
+    //  Serial.print(incomingByte[i]);
+    //  Serial.print(" ");
+   // }
+  //}
   
   if(tlmctrl){
     Serial.println(" ");
   }
 
-  CCSDS_WR_LEN(TlmHeader.PriHdr,tlm_pos);
-  
-  memcpy(telemetry_data, &TlmHeader, sizeof(TlmHeader));
-
-  //for(i=0;i<sizeof(CCSDS_TlmPkt_t);i++){
-  //  telemetry_data[i] = TlmHeader_u.hdrbytes[i];
-  //}
-  
 }
 
-void cmdResponse(){
-  uint8_t pkt_pos = CMD_HDR_LEN;
-  
+void cmdResponse(uint8_t fcncode, uint8_t params[], uint8_t bytesread){
+  uint8_t pkt_pos = 0;
+  Serial.println("Cmd response");
+
   if(fcncode == set_tlmctrl_CMD){
         pkt_pos = extractFromTlm(tlmctrl, incomingByte, pkt_pos);
 
@@ -727,7 +702,6 @@ void setup() {
   do{
     snprintf(filename, sizeof(filename), "data%03d.txt", n); // includes a three-digit sequence number in the file name
     n++;
-    Serial.println(filename);
   }
   while(SD.exists(filename));
 
@@ -765,6 +739,27 @@ void setup() {
     
 }
 
+void getInput(){
+    // check if there's data to be read
+    if ((pkt_type = readMsg(1)) > -1) {
+
+      // print info about the packet
+      printPktInfo();
+      
+      // process based on command or telemetry packet
+      if(pkt_type){
+        bytesread = readCmdMsg(incomingByte, fcncode);
+
+        cmdResponse(fcncode, incomingByte, bytesread);
+
+      }
+      else{
+
+        bytesread = readTlmMsg(incomingByte);
+      }
+    }
+}
+
 
 // ***********************************
 // Loop
@@ -778,36 +773,8 @@ void loop() {
    logFile = SD.open(filename, FILE_WRITE);
    logFile.write(cycle_start_time);
    logFile.write(", ");
-   
-    // command handling
-    bytes_available = Serial.available();
-    if (bytes_available > 8) {
-      // read the incoming byte:
-      Serial.readBytes(incomingByte, Serial.available());
 
-      //for(i=0;i<sizeof(CCSDS_CmdPkt_t);i++){
-      //  CmdHeader_u.hdrbytes[i] = incomingByte[i];
-      //}
-      //PktType = CCSDS_RD_TYPE(CmdHeader.PktHdr.PriHdr);
-      //fcncode = CCSDS_RD_FC(CmdHeader.PktHdr.SecHdr);
-      //APID = CCSDS_RD_APID(CmdHeader.PktHdr.PriHdr);
-      
-      // copy header into structure
-      memcpy(&CmdHeader, incomingByte, sizeof(CmdHeader));
-
-      // extract header values
-      PktType = CCSDS_RD_TYPE(CmdHeader.PriHdr);
-      fcncode = CCSDS_RD_FC(CmdHeader.SecHdr);
-      APID = CCSDS_RD_APID(CmdHeader.PriHdr);
-      
-      Serial.print("Received pkt type: ");
-      Serial.print(PktType);
-      Serial.print(" FcnCode: ");
-      Serial.print(fcncode);
-        
-      cmdResponse();
-
-    }
+    getInput();
 
     temp1 = tempsensor1.readTempC();
     temp2 = tempsensor2.readTempC();
@@ -854,8 +821,7 @@ void loop() {
 
   compileTLM();
 
-  sendData( tlm_addr, telemetry_data, tlm_pos);
-  //sendData( (uint8_t) 3, telemetry_data, tlm_pos);
+  sendTlmMsg( tlm_addr, telemetry_data, tlm_pos);
   logFile.println();
   logFile.close();
 

@@ -10,17 +10,19 @@ int InitXBee(uint16_t address,  uint16_t PanID, Stream &serial);
 // sending functions
 int sendAtCommand(AtCommandRequest atRequest);
 
-int sendData(uint16_t SendAddr, uint8_t payload[], int payload_size);
-
-int sentHKpkt(uint16_t addr);
+int _sendData(uint16_t SendAddr, uint8_t payload[], int payload_size);
+int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size);
+int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payload_size);
 
 // reading functions
-String readMsg_str();
-
-int readMsg(uint8_t data[], uint16_t timeout);
+int _readXbeeMsg(uint8_t data[], uint16_t timeout);
+int readMsg(uint16_t timeout);
+int readCmdMsg(uint8_t params[], uint8_t &fcncode);
+int readTlmMsg(uint8_t data[]);
 
 // utility functions
-String data2string(uint8_t data[]);
+
+void printPktInfo();
 
 template<typename T> uint8_t addIntToTlm(const T& val, uint8_t payload[], uint8_t start_pos) {
 	for(uint8_t i = 0; i < sizeof(T); i++) { // Loop through each byte
@@ -45,7 +47,8 @@ template<typename T> uint8_t extractFromTlm(T& extractedVal, uint8_t data[], uin
 
 	for(uint8_t i = 0; i < sizeof(T); i++) {
 		tmp[sizeof(T) - (i + 1)] = data[start_pos + i]; // endianness...
-	}
+    //tmp[i] = data[start_pos + i]; // endianness...
+  }
 	memcpy(&extractedVal,&tmp[0],sizeof(T));
   return start_pos + sizeof(T);
 }
