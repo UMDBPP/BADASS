@@ -725,6 +725,7 @@ void calcPtErr(imu::Vector<3> target_body, imu::Vector<3> x_axis, imu::Vector<3>
 }
 
 void BADASS(){
+    /*
 	Serial.println(F("BBBBBBBBBBBBBBBBB              AAA              DDDDDDDDDDDDD                 AAA                SSSSSSSSSSSSSSS   SSSSSSSSSSSSSSS"));
 	Serial.println(F("B::::::::::::::::B            A:::A             D::::::::::::DDD             A:::A             SS:::::::::::::::SSS:::::::::::::::S"));
 	Serial.println(F("B::::::BBBBBB:::::B          A:::::A            D:::::::::::::::DD          A:::::A           S:::::SSSSSS::::::S:::::SSSSSS::::::S"));
@@ -741,6 +742,58 @@ void BADASS(){
 	Serial.println(F("B:::::::::::::::::A:::::A               A:::::A D:::::::::::::::DA:::::A               A:::::AS::::::SSSSSS:::::S::::::SSSSSS:::::S"));
 	Serial.println(F("B::::::::::::::::A:::::A                 A:::::AD::::::::::::DDDA:::::A                 A:::::S:::::::::::::::SSS:::::::::::::::SS "));
 	Serial.println(F("BBBBBBBBBBBBBBBBAAAAAAA                   AAAAAADDDDDDDDDDDDD  AAAAAAA                   AAAAAASSSSSSSSSSSSSSS   SSSSSSSSSSSSSSS   "));
+    */                                                                                      
+    Serial.println(F("                                      BADASSBAD                                         "));
+    Serial.println(F("                                  ASSBADASSBADASSBA                                     "));
+    Serial.println(F("                              DASSBADASSBADASSBADASSBA                                  "));
+    Serial.println(F("                      DASSBADASSBADAS           SBADASSB                                "));
+    Serial.println(F("                   ADASSBADASSBA                  DASSBAD                               "));
+    Serial.println(F("                 ASSBADASSBADASS                   BADASS                               "));
+    Serial.println(F("                 BADASSBADASSBADA                   SSBAD                               "));
+    Serial.println(F("                 ASSBADASSBA DASSBA    DASSBADASSB  ADASS                               "));
+    Serial.println(F("                 BADASSBADASSBADASSB ADASSBADASSBADA SSBA                               "));
+    Serial.println(F("                 DASSBADASSBADASSB  ADASSBADASSBADASSBADA                               "));
+    Serial.println(F("                SSBAD  ASSBADASSBA  DASSBADASSBADASSBADAS                               "));
+    Serial.println(F("               SBADASSBADASSBADASSB ADASSBADASS BADASSBAD                               "));
+    Serial.println(F("              ASSBADASSBADASSBADA   SSBADASSBADASSBADASSB                               "));
+    Serial.println(F("             ADASSBADASSBADASSBADASSBADASSBADASSB  ADASS                                "));
+    Serial.println(F("            BADAS          SBADASSBADASSBADAS     SBADAS                                "));
+    Serial.println(F("           SBADA                      SSBADAS     SBADAS                                "));
+    Serial.println(F("          SBADAS                                 SBADAS                                 "));
+    Serial.println(F("         SBADAS                                 SBADAS                                  "));
+    Serial.println(F("        SBADAS                                  SBADAS                                  "));
+    Serial.println(F("        SBADA                      SSBA        DASSBA                                   "));
+    Serial.println(F("        DASS                      BADAS SBA   DASSBA                                    "));
+    Serial.println(F("        DASS                      BADASSBADA  SSBAD                         ASSBADASS   "));
+    Serial.println(F("       BADAS                      SBADASSBA  DASSB                        ADASSBADASSB  "));
+    Serial.println(F("       ADASS                     BADASSBADA SSBAD                       ASSBAD    ASSB  "));
+    Serial.println(F("       ADASS                     BADASSBAD  ASSBA                     DASSBAD    ASSBA  "));
+    Serial.println(F("       DASSB                    ADASSBADA  SSBADA                   SSBADAS     SBADA   "));
+    Serial.println(F("       SSBAD                    ASSBADAS   SBADASSBADASSBADASSB   ADASSBA     DASSB     "));
+    Serial.println(F("        ADAS                   SBADASSB    ADASSBADASSBADASSBADASSBADAS      SBADA      "));
+    Serial.println(F("        SSBA                   DASSBAD     ASSBA   DASSB   ADASSBADAS      SBADAS       "));
+    Serial.println(F("        SBAD                  ASSBADAS      SBA   DASSBADASSBADASSB      ADASSB         "));
+    Serial.println(F("        ADASS               BADAS SBADA         SSBADASSBADASSBADA     SSBADAS          "));
+    Serial.println(F("         SBAD             ASSBA  DASSBAD         ASSBADASSBADASSBADA   SSBADASS         "));
+    Serial.println(F("         BADAS            SBADASSBADASSB                     ADASSBAD    ASSBADASS      "));
+    Serial.println(F("          BADAS            SBADASSBADAS              SBAD       ASSBAD  ASSB ADASS      "));
+    Serial.println(F("          BADASS              BADA                   SSBA        DASSBA  DASSBADA       "));
+    Serial.println(F("           SSBADA                                SSB              ADASS    BADA         "));
+    Serial.println(F("            SSBADASS                            BADA              SSBAD     ASSB        "));
+    Serial.println(F("               ADASSBA                          DASS              BADASSBADASSBA        "));
+    Serial.println(F("     DAS        SBADASSBAD                       ASSB           ADASSBADASSBADA         "));
+    Serial.println(F("    SSBADAS    SBADASSBADASSBADA                  SSB         ADASSBA    D              "));
+    Serial.println(F("    ASSBADASSBADAS SBADASSBADASSBADASSBA           DASS    BADASSB                      "));
+    Serial.println(F("    ADAS SBADASSBADASSB    ADASSBADASSBADA SSBADASSBADASSBADASSB                        "));
+    Serial.println(F("     ADAS  SBADASSBAD         ASSBADASSBA DASSBADASSBADASSBAD                           "));
+    Serial.println(F("      ASSB   ADASSB         ADASSBADASSB ADASS BADASSBADAS                              "));
+    Serial.println(F("       SBADASSBAD           ASSBADASSBA  DASS                                           "));
+    Serial.println(F("        BADASSB              ADASSBAD   ASSB                                            "));
+    Serial.println(F("          ADA                SSBADA    SSBA                                             "));
+    Serial.println(F("                              DASSBA  DASS                                              "));
+    Serial.println(F("                               BADASSBADA                                               "));
+    Serial.println(F("                                 SSBADAS                                                "));
+    Serial.println(F("                                   SBA                                                  "));
 }
   
 // ***********************************
