@@ -120,10 +120,12 @@ void loop() {
             for (int i = 0; i < XbeeBytesRead; i++){
              // Print to 900s
              Serial.print(Buff_Xbee2900[i],HEX);
-             Serial2.print(Buff_Xbee2900[i]);
+
+             // NOTE: This must be write instead of print, otherwise it'll convert
+             //   it to text characters
+             Serial2.write(Buff_Xbee2900[i]);
              Serial.print(", ");
              }
-          Serial2.println();
           Serial.println();
           }
        
