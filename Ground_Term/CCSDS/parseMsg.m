@@ -70,30 +70,32 @@ function msg = parseMsg(byte_arr, endianness)
 
     end
     
+    Time = datenum(now());
+    
     TLM.APID = addsample(TLM.APID, ...
-            'Data', msg.APID, 'Time', msg.Time);
+            'Data', msg.APID, 'Time', Time);
     TLM.SecHdr = addsample(TLM.SecHdr, ...
-            'Data', msg.SecHdr, 'Time', msg.Time);
+            'Data', msg.SecHdr, 'Time', Time);
     TLM.CCSDSVer = addsample(TLM.CCSDSVer, ...
-            'Data', msg.CCSDSVer, 'Time', msg.Time);
+            'Data', msg.CCSDSVer, 'Time', Time);
     TLM.SeqCnt = addsample(TLM.SeqCnt, ...
-            'Data', msg.SeqCnt, 'Time', msg.Time);
+            'Data', msg.SeqCnt, 'Time', Time);
     TLM.SegFlag = addsample(TLM.SegFlag, ...
-            'Data', msg.SegFlag, 'Time', msg.Time);
+            'Data', msg.SegFlag, 'Time', Time);
     TLM.PktLen = addsample(TLM.PktLen, ...
-            'Data', msg.PktLen, 'Time', msg.Time);    
+            'Data', msg.PktLen, 'Time', Time);    
         
     
     if(msg.PktType)
         TLM.FcnCode = addsample(TLM.FcnCode, ...
-            'Data', msg.FcnCode, 'Time', msg.Time);
+            'Data', msg.FcnCode, 'Time', Time);
         TLM.Checksum = addsample(TLM.Checksum, ...
-            'Data', msg.Checksum, 'Time', msg.Time);
+            'Data', msg.Checksum, 'Time', Time);
         TLM.Reserved = addsample(TLM.Reserved, ...
-            'Data', msg.Reserved, 'Time', msg.Time);
+            'Data', msg.Reserved, 'Time', Time);
     else
         TLM.Time = addsample(TLM.Time, ...
-            'Data', msg.Time, 'Time', msg.Time);
+            'Data', Time, 'Time', Time);
         
     end
     
@@ -115,6 +117,14 @@ function msg = parseMsg(byte_arr, endianness)
     cmd_rcvd_MASK =     hex2dec('00000800');
     desired_cyc_time_MASK = hex2dec('00001000');
     cmdecho_MASK =      hex2dec('00001000');
+    temp1_MASK =        hex2dec('00002000');
+    temp2_MASK =        hex2dec('00004000');
+    tempbme_MASK =      hex2dec('00008000');
+    pres_MASK =         hex2dec('00010000');
+    alt_MASK =          hex2dec('00020000');
+    humid_MASK =        hex2dec('00040000');
+    current_MASK =      hex2dec('00080000');
+    voltage_MASK =      hex2dec('00100000');
 
     % // commanding
     set_tlmctrl_CMD = hex2dec('01');
@@ -136,8 +146,7 @@ function msg = parseMsg(byte_arr, endianness)
     else
         tlmctrl = typecast(pktdata(data_idx:data_idx+3),'uint32');
     end
-    tlmctrl
-    TLM.tlmctrl = addsample(TLM.tlmctrl, 'Data', tlmctrl, 'Time', msg.Time);
+    TLM.tlmctrl = addsample(TLM.tlmctrl, 'Data', tlmctrl, 'Time', Time);
     data_idx = data_idx + 4;
 
     
@@ -145,14 +154,14 @@ function msg = parseMsg(byte_arr, endianness)
     if(bitand(tlmctrl,target_ned_MASK))
         [vec_tmp, data_idx] = extractvec(pktdata,data_idx,3, endianness);
         TLM.v_target_ned = addsample(TLM.v_target_ned, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
     
     % extrac cal values
     if(bitand(tlmctrl,bno_cal_MASK))
-        tmp = pktdata(data_idx:data_idx+3).';
+        tmp = pktdata(data_idx:data_idx+3);
         TLM.bno_cal = addsample(TLM.bno_cal, ...
-            'Data', tmp, 'Time', msg.Time);
+            'Data', tmp, 'Time', Time);
         data_idx = data_idx + 4;
     end
     
@@ -160,48 +169,48 @@ function msg = parseMsg(byte_arr, endianness)
     if(bitand(tlmctrl,euler_ang_MASK))
         [vec_tmp, data_idx] = extractvec(pktdata,data_idx,3, endianness);
         TLM.euler_ang = addsample(TLM.euler_ang, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
     
     % extract q_imu2body
     if(bitand(tlmctrl,q_imu2body_MASK))
         [vec_tmp, data_idx] = extractvec(pktdata,data_idx,4, endianness);
         TLM.q_imu2body = addsample(TLM.q_imu2body, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
         
     % extract q_ned2imu
     if(bitand(tlmctrl,q_ned2imu_MASK))
         [vec_tmp, data_idx] = extractvec(pktdata,data_idx,4, endianness);
         TLM.q_ned2imu = addsample(TLM.q_ned2imu, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
     
     % extract q_ned2body
     if(bitand(tlmctrl,q_ned2body_MASK))
-        [vec_tmp, data_idx] = extractvec(pktdata,data_idx,4, endianness);
+        [vec_tmp, data_idx] = extractvec(pktdata, data_idx, 4, endianness);
         TLM.q_ned2body = addsample(TLM.q_ned2body, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
     
     % extract v_targetbody
     if(bitand(tlmctrl,v_targetbody_MASK))
-        [vec_tmp, data_idx] = extractvec(pktdata,data_idx,3, endianness);
+        [vec_tmp, data_idx] = extractvec(pktdata, data_idx, 3, endianness);
         TLM.v_targetbody = addsample(TLM.v_targetbody, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
     
     % extract azel_err
     if(bitand(tlmctrl,azel_err_MASK))
-        [vec_tmp, data_idx] = extractvec(pktdata,data_idx,2, endianness);
+        [vec_tmp, data_idx] = extractvec(pktdata, data_idx, 2, endianness);
         TLM.azel_err = addsample(TLM.azel_err, ...
-            'Data', vec_tmp, 'Time', msg.Time);
+            'Data', vec_tmp, 'Time', Time);
     end
     
     % extract el_cmd
     if(bitand(tlmctrl,el_cmd_MASK))
         TLM.el_cmd = addsample(TLM.el_cmd, ...
-            'Data', pktdata(data_idx), 'Time', msg.Time);
+            'Data', pktdata(data_idx), 'Time', Time);
         data_idx = data_idx + 1;
     end
     
@@ -213,29 +222,43 @@ function msg = parseMsg(byte_arr, endianness)
             tmp = typecast(pktdata(data_idx:data_idx+1),'uint16');
         end
         TLM.cycle_time = addsample(TLM.cycle_time, ...
-            'Data', tmp, 'Time', msg.Time);
+            'Data', tmp, 'Time', Time);
         data_idx = data_idx + 2;
     end
     
     % extract cmd_rcvd
     if(bitand(tlmctrl,cmd_rcvd_MASK))
         TLM.cmd_rcvd = addsample(TLM.cmd_rcvd, ...
-            'Data', pktdata(data_idx), 'Time', msg.Time);
+            'Data', pktdata(data_idx), 'Time', Time);
         data_idx = data_idx + 1;
     end
     
     % extract desired_cyc_time
     if(bitand(tlmctrl,desired_cyc_time_MASK))
         TLM.desired_cyc_time = addsample(TLM.desired_cyc_time, ...
-            'Data', pktdata(data_idx), 'Time', msg.Time);
+            'Data', pktdata(data_idx), 'Time', Time);
         data_idx = data_idx + 1;
     end
     
-    % extract cmdecho
+    % extract fcncode
     if(bitand(tlmctrl,cmdecho_MASK))
         TLM.cmdecho = addsample(TLM.cmdecho, ...
-            'Data', pktdata(data_idx), 'Time', msg.Time);
+            'Data', pktdata(data_idx), 'Time', Time);
         data_idx = data_idx + 1;
+    end
+    
+    % extract temp1
+    if(bitand(tlmctrl,temp1_MASK))
+        [float_val, data_idx] = extractFloat(pktdata,data_idx,endianness);
+        TLM.temp1 = addsample(TLM.temp1, ...
+            'Data', float_val, 'Time', Time);
+    end
+    
+    % extract cmdecho
+    if(bitand(tlmctrl,temp2_MASK))
+        TLM.temp2 = addsample(TLM.temp2, ...
+            'Data', typecast(pktdata(data_idx:data_idx+3),'single'), 'Time', Time);
+        data_idx = data_idx + 4;
     end
 
 

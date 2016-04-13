@@ -86,7 +86,7 @@ function start_serial_monitor(varargin)
     t.StartFcn = @initTimer;
     t.TimerFcn = {@timerCallback, serConn, logfile};
     t.StopFcn = {@closeTimer, serConn, logfile};
-    t.Period   = 0.5;
+    t.Period   = 0.25;
     t.ExecutionMode  = 'fixedRate';
     t.ErrorFcn = {@ecallback, serConn, logfile};
     start(t);
@@ -99,11 +99,13 @@ end
 
 function ecallback(src, event, serConn, logfile)
     
+disp(getReport(ME))
     err = lasterror();
-    disp(err);
     disp(err.message);
-    disp(err.stack);
-    disp(err.identifier);
+
+    for i = 1:length(err.stack)
+        fprintf('Error in %s on line %d \n',err.stack(i,1).name,err.stack(i,1).line)
+    end
     
     % close the serial connection
     fclose(serConn)
@@ -128,7 +130,7 @@ function initTimer(src, event)
     UserData = get(src, 'UserData');
     
     % create the byte buffer
-    UserData.ByteBuffer = 0;
+    UserData.ByteBuffer = 0.';
     
     disp('Initialised bytebuffer')
     
@@ -157,50 +159,66 @@ function timerCallback(src, event, serConn, logfile)
 % called at timer frequency, reads data from serial port, processes it, and
 % saves it into the telemetry database
 
+    try
     % get the userdata structure from the timer callback
 	UserData = get(src, 'UserData');
-   
+    total_pktlen = 0;
+    
     % if there are bytes to read, read them
     if(serConn.BytesAvailable > 0)
         RxText = fread(serConn,serConn.BytesAvailable);
-
+        
         % convert it from char to integer
         data = uint8(RxText);
-
+        
+        % make sure the data is a row
+        if(size(data,1) > size(data,2))
+            data = data.';
+        end
+        
         % append the new data to what we've read previously
-        UserData.ByteBuffer = [UserData.ByteBuffer; data];
-
+        UserData.ByteBuffer = [UserData.ByteBuffer data];
+        
+        for i = 1:length(UserData.ByteBuffer)
+            fprintf('%d',UserData.ByteBuffer(i))
+            fprintf(', ');
+        end
+        fprintf('\n');
+        
         % define the length of an xbee header
         xbee_hdr_len = 6;
 
         % look for header bytes
-        pkt_loc = strfind(UserData.ByteBuffer.', [hex2dec('08') hex2dec('02')]);
+        pkt_loc = strfind(UserData.ByteBuffer, [hex2dec('08') hex2dec('02')]);
             
         % if a packet was found
         if(~isempty(pkt_loc))
-
+            
+            pkt_loc = pkt_loc(1);
+            
             fprintf('Found pkt at %d \n',pkt_loc)
             
             % extract the packet header
-            if(length(UserData.ByteBuffer)-pkt_loc > xbee_hdr_len)
-                     
-                pkthdr = data(pkt_loc-1:pkt_loc+xbee_hdr_len);
+            if(pkt_loc+xbee_hdr_len < length(UserData.ByteBuffer))
+
+                pkthdr = UserData.ByteBuffer(pkt_loc:pkt_loc+xbee_hdr_len);
                 
                 % extract the packet length
                 [~, ~, ~, ~, ~, ~, PktLen] = ExtractPriHdr(pkthdr, Endian.Little);
  
                 total_pktlen = PktLen+7;
-                     
+   
                 % if we've received the entire packet, process it
-                if(pkt_loc+length(UserData.ByteBuffer) > total_pktlen)
+                if(pkt_loc+total_pktlen < length(UserData.ByteBuffer))
  
                     % output it to the command line
                     fprintf('R %s: ', datestr(now,'HH:MM:SS.FFF'));
                     fprintf(logfile,'R %s: ', datestr(now,'HH:MM:SS.FFF'));
 
                     for i=pkt_loc:pkt_loc+total_pktlen
-                        fprintf('%s',dec2hex(UserData.ByteBuffer(i)));
-                        fprintf(logfile,'%s',dec2hex(UserData.ByteBuffer(i)));
+%                         dec2hex(UserData.ByteBuffer(i))
+                        fprintf('%02s',dec2hex(UserData.ByteBuffer(i)));
+                        fprintf(logfile,'%02s',dec2hex(UserData.ByteBuffer(i)));
                         if(i~=length(UserData.ByteBuffer))
                             fprintf(',');
                             fprintf(logfile,',');
@@ -228,38 +246,10 @@ function timerCallback(src, event, serConn, logfile)
     
     
     set(src, 'UserData',UserData);
-
-    %     % if it looks like a BADASS message
-%     if(all(data(1:2)== [hex2dec('08') hex2dec('2')] ))
-% 
-%         % parse the message
-%         msg = parseMsg(data,endianness);
-% 
-%         % output it to the command line
-%         fprintf('R %s: ', datestr(now,'HH:MM:SS.FFF'));
-%         for i=1:length(data)
-%             fprintf('%s',dec2hex(data(i)));
-%             if(i~=length(data))
-%                 fprintf(',');
-%             end
-% 
-%         end
-%         fprintf('\n');
-%     % otherwise we must be out of sync
-%     else
-%         % print it to the command line
-%         fprintf('Out of synch, waiting, got: \n');
-%         for i=1:length(RxText)
-%             fprintf('%s',dec2hex(uint8(RxText(i))));
-%             if(i~=length(RxText))
-%                 fprintf(',');
-%             end
-% 
-%         end
-%         fprintf('\n');
-% 
-%         % flush the input to try to resync us
-%         flushinput(serConn);
-%         pause(0.01);
-
+    assignin('base','ByteBuffer',UserData.ByteBuffer);
+    catch ME
+        disp(getReport(ME));
+        
+    end
+ 
 end

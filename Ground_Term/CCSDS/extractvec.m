@@ -12,13 +12,17 @@ function [vec, data_idx] = extractvec(pktdata,data_idx,veclen,endianness)
     vec = zeros(veclen,1);
 
     for i = 1:veclen
-        if(endianness == Endian.Little)
-%             dec2hex(pktdata(data_idx+3:-1:data_idx))
-            vec(i) = typecast(pktdata(data_idx+3:-1:data_idx),'single');
+        if(length(pktdata) > data_idx+3)
+            if(endianness == Endian.Little)
+                vec(i) = typecast(pktdata(data_idx+3:-1:data_idx),'single');
+            else
+                vec(i) = typecast(pktdata(data_idx:data_idx+3),'single');
+            end
+            data_idx = data_idx + 4;
         else
-            vec(i) = typecast(pktdata(data_idx:data_idx+3),'single');
+            warning('extractvec:TooShort','Array doesn''t contain enough elements, returning -1')
+            vec{i} = -1;
         end
-        data_idx = data_idx + 4;
     end
 
     vec = vec.';

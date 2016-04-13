@@ -14,11 +14,17 @@ function [arr, char_arr, str_arr] = CreateCmdSecHdr(FcnCode)
     Reserved = 0;
     Checksum = 0;
     
+    % check inputs
+    if(FcnCode > 127)
+       warning('CreateCmdSecHdr:FcnCodeOutOfRange','Function code is out of range and may be truncated');
+    end
+    
+    
     command_tmp = uint16(0);
 
     command_tmp = bitor(bitand(bitshift(uint16(Checksum),0),hex2dec('00FF')),command_tmp);
     command_tmp = bitor(bitand(bitshift(uint16(FcnCode),8),hex2dec('7F00')),command_tmp);
-    command_tmp = bitor(bitand(bitshift(uint16(Reserved),15),hex2dec('8001')),command_tmp);
+    command_tmp = bitor(bitand(bitshift(uint16(Reserved),15),hex2dec('8000')),command_tmp);
     
     command = typecast(command_tmp,'uint8');
 

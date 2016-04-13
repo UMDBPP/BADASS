@@ -31,7 +31,7 @@ function [APID, SecHdr, PktType, CCSDSVer, SeqCnt, SegFlag, PktLen] = ExtractPri
 
     % sequence field
     if(endianness == Endian.Little)
-        sequence_tmp = typecast(arr(4:-1:3),'uint16');
+        sequence_tmp = swapbytes(typecast(arr(4:-1:3),'uint16'));
     else
         sequence_tmp = typecast(arr(3:4),'uint16');
     end

@@ -22,5 +22,5 @@ function [arr, char_arr, str_arr] = CreateCmdHdr(APID, SeqCnt, SegFlag, PktLen, 
     char_arr = char(arr.');
     
     % convert to string of number
-    str_arr = strrep(regexprep(num2str([100 0 1 0 3 0 0 10]),' +',' '),' ',',');
+    str_arr = strrep(regexprep(num2str(arr),' +',' '),' ',',');
 end
