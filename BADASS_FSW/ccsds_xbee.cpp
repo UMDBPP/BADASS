@@ -17,19 +17,15 @@ XBee xbee = XBee();
 
 //////////////// initalize variables
 
-#define HK_REQ_CMD 1
-
-#define DATA_PKT 2
-
 // max length of packet's payload (ie data)
 #define PKT_MAX_LEN 100
 
 uint8_t _packet_data[PKT_MAX_LEN];
 int _bytesread;
 
-uint32_t SendCtr = 0;
+uint32_t _SendCtr = 0;
 
-uint32_t RecvCtr = 0;
+uint32_t _RecvCtr = 0;
 
 void printHex(int num, int precision) {
      char tmp[16];
@@ -255,12 +251,12 @@ Will send the data and print the SendCtr and the data sent to the serial.
   xbee.send(tx);
   
   // keep track of how many packets we've sent
-  SendCtr++;
+  _SendCtr++;
   
   // Display data for the user
   Serial.println();
   Serial.print(F("Sent pkt #"));
-  Serial.print(SendCtr);
+  Serial.print(_SendCtr);
   Serial.print(F(", data: "));
 
   for(int i = 0; i < payload_size; i++){
@@ -292,7 +288,7 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
   CCSDS_WR_SHDR(_PriHeader,1);
   CCSDS_WR_TYPE(_PriHeader,0);
   CCSDS_WR_VERS(_PriHeader,0);
-  CCSDS_WR_SEQ(_PriHeader,SendCtr);
+  CCSDS_WR_SEQ(_PriHeader,_SendCtr);
   CCSDS_WR_SEQFLG(_PriHeader,0x03);
   CCSDS_WR_LEN(_PriHeader,payload_size+sizeof(_PriHeader)+sizeof(_TlmSecHeader));
 
@@ -338,7 +334,7 @@ int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payloa
   CCSDS_WR_SHDR(_PriHeader,1);
   CCSDS_WR_TYPE(_PriHeader,1);
   CCSDS_WR_VERS(_PriHeader,0);
-  CCSDS_WR_SEQ(_PriHeader,SendCtr);
+  CCSDS_WR_SEQ(_PriHeader,_SendCtr);
   CCSDS_WR_SEQFLG(_PriHeader,0x03);
   CCSDS_WR_LEN(_PriHeader,payload_size+sizeof(_PriHeader)+sizeof(_CmdSecHeader));
 
@@ -376,9 +372,10 @@ int readMsg(uint16_t timeout){
   _bytesread = _readXbeeMsg(_packet_data, timeout);
         
   if(_bytesread > 0){
-    
+
     // copy the primary header into a structure
-    memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+    //memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+     _PriHeader = *(CCSDS_PriHdr_t*) (_packet_data);
 
     // return the packet type
     return CCSDS_RD_TYPE(_PriHeader);
@@ -397,15 +394,19 @@ int readCmdMsg(uint8_t params[], uint8_t &fcncode){
 
   // declare the header structures
   CCSDS_PriHdr_t _PriHeader;
-  CCSDS_CmdSecHdr_t _CmdSecHeader;
 
   // copy the primary header into a structure
-  memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+  //memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+  _PriHeader = *(CCSDS_PriHdr_t*) (_packet_data);
 
   if(CCSDS_RD_SHDR(_PriHeader)){
-    
+
+    // declare the header structures
+    CCSDS_CmdSecHdr_t _CmdSecHeader;
+
     // copy the secondary header into a structure
-    memcpy(&_CmdSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_CmdSecHeader));
+    //memcpy(&_CmdSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_CmdSecHeader));
+    _CmdSecHeader = *(CCSDS_CmdSecHdr_t*) (_packet_data+sizeof(_PriHeader));
 
     // copy the parameters into the user's pointer
     memcpy(params, _packet_data+sizeof(_PriHeader)+sizeof(_CmdSecHeader), _bytesread-sizeof(_PriHeader)-sizeof(_CmdSecHeader));
@@ -422,15 +423,19 @@ int readTlmMsg(uint8_t data[]){
   
   // declare the header structures
   CCSDS_PriHdr_t _PriHeader;
-  CCSDS_TlmSecHdr_t _TlmSecHeader;
 
   // copy the primary header into a structure
-  memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+  //memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+  _PriHeader = *(CCSDS_PriHdr_t*) (_packet_data);
 
   if(!CCSDS_RD_SHDR(_PriHeader)){
-    
+
+    // declare the header structures
+    CCSDS_TlmSecHdr_t _TlmSecHeader;
+
     // copy the secondary header into a structure
-    memcpy(&_TlmSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_TlmSecHeader));
+    //memcpy(&_TlmSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_TlmSecHeader));
+    _TlmSecHeader = *(CCSDS_TlmSecHdr_t*) (_packet_data+sizeof(_PriHeader));
 
     // copy the parameters into the user's pointer
     memcpy(data, _packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), _bytesread-sizeof(_PriHeader)-sizeof(_TlmSecHeader));
@@ -447,7 +452,8 @@ void printPktInfo(){
   CCSDS_PriHdr_t _PriHeader;
 
   // copy data to it
-  memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+  //memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+  _PriHeader = *(CCSDS_PriHdr_t*) (_packet_data);
 
   // print info about the packet
   Serial.print("APID: ");
@@ -472,7 +478,8 @@ void printPktInfo(){
     CCSDS_CmdSecHdr_t _CmdSecHeader;
 
     // copy the data to it
-    memcpy(&_CmdSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_CmdSecHeader));
+    //memcpy(&_CmdSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_CmdSecHeader));
+    _CmdSecHeader = *(CCSDS_CmdSecHdr_t*) (_packet_data+sizeof(_PriHeader));
 
     // print the command-specific data
     Serial.print("Cmd: ");
@@ -486,7 +493,8 @@ void printPktInfo(){
     CCSDS_TlmSecHdr_t _TlmSecHeader;
 
     // copy the data to it
-    memcpy(&_TlmSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_TlmSecHeader));
+    //memcpy(&_TlmSecHeader, _packet_data+sizeof(_PriHeader), sizeof(_TlmSecHeader));
+    _TlmSecHeader = *(CCSDS_TlmSecHdr_t*) (_packet_data+sizeof(_PriHeader));
 
     // print the telemetry-specific data
     Serial.print("Sec: ");
@@ -547,7 +555,7 @@ its effect on the rest of the program.
      else if( xbee.getResponse().getApiId() == RX_16_RESPONSE) {
        
       // record the new packet
-      RecvCtr++;
+      _RecvCtr++;
       
       Serial.print(F("Received Message..."));
        

@@ -7,6 +7,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
+#include "Adafruit_BNO055.h"
 #include <Servo.h> 
 #include <Adafruit_MCP9808.h>
 #include <Adafruit_BME280.h>
@@ -64,9 +65,9 @@ Adafruit_ADS1015 ads;
 #define TLMMask_q_imu2body 		0x00000010
 #define TLMMask_q_ned2imu    	0x00000020
 #define TLMMask_q_ned2body		0x00000040
-#define TLMMask_v_targetbody  	0x00000080
+#define TLMMask_v_targetbody  0x00000080
 #define TLMMask_AzElErr 	    0x00000100
-#define TLMMask_ElCmd		    0x00000200
+#define TLMMask_ElCmd		      0x00000200
 #define TLMMask_CycleTime  		0x00000400
 #define TLMMask_CmdRcvd   		0x00000800
 #define TLMMask_DesiredCycTime	0x00001000
@@ -78,10 +79,10 @@ Adafruit_ADS1015 ads;
 #define TLMMask_PresAlt    		0x00020000
 #define TLMMask_Humid     		0x00040000
 #define TlmMask_Current    		0x00080000
-#define TLMMask_Volt	    	0x00100000
+#define TLMMask_Volt	    	  0x00100000
 #define TLMMask_InitStat    	0x00200000
-#define TLMMask_CmdCnt        	0x00400000
-#define TLMMask_TlmCnt        	0x00800000
+#define TLMMask_CmdCnt        0x00400000
+#define TLMMask_TlmCnt        0x00800000
 
 // this bitfield, and the masks above, define which values get output in
 //  telemetry 
@@ -98,8 +99,7 @@ uint32_t tlmctrl = 0b0000000000000111;
 #define CMD_RequestTlmPt	0x07 // Not yet implemented
 #define CMD_SendTestPkt 	0x08
 #define CMD_SetTlmAddr 		0x09
-#define CMD_SetTime 		0x0A
-#define CMD_SetElPolarity 	0x0B
+#define CMD_SetElPolarity 0x0A
 
 ////// Sensors 
 // defines bits in initstatus for sensor status
@@ -123,7 +123,7 @@ uint32_t tlmctrl = 0b0000000000000111;
 uint16_t desiredcycletime = 2000; // [ms]
 
 // command the servo
-bool ServoEnableFlg = true;
+bool ServoEnableFlg = false;
 bool El_Cmd_Polarity = true;
 
 // target in the NED frame
@@ -143,46 +143,42 @@ uint8_t tlm_addr = 2;
 // Program Memory
 // These values are calculated/generated during the exectuion of
 //  the program
-
-// interface 
+int cycle_start_time = 0;
+int servo_cmd = 0;
 uint8_t incomingByte[100];
-uint8_t telemetry_data[200];
-uint16_t cmdrcvdcnt = 0;
-uint16_t tlmsentcnt = 0;
-int pkt_type = 0;
 int bytesread = 0;
 uint8_t tlm_len = 0;
-uint8_t fcncode = 0;
-int APID = 0;
-int PktType = 0;
+uint8_t telemetry_data[200];
+uint16_t tlm_seq_cnt = 0;
+int pkt_type = 0;
+uint16_t cmdrcvdcnt = 0;
+uint16_t tlmsentcnt = 0;
 
-// communications
-uint16_t xbee_addr = 01;
-uint16_t xbee_PanID = 0x0B0B;
-
-
-// environmental data
 float tempbme = 0.0;
 float pres = 0.0;
 float alt = 0.0;
 float humid = 0.0;
 uint16_t raw_current, raw_voltage;
-float temp1 = 0;
-float temp2 = 0;
-
-int cycle_start_time = 0;
-int servo_cmd = 0;
 uint16_t initstatus = 0;
 
 // make it long enough to hold your longest file name, plus a null terminator
 char filename[16]; 
 
-// attitude control
+uint16_t xbee_addr = 01;
+uint16_t xbee_PanID = 0x0B0B;
+
 uint8_t sys_cal = 0, gyro_cal = 0, accel_cal = 0, mag_cal = 0;
 uint8_t sys_stat = 0, st_res = 0, sys_err = 0;
 int i = 0;
 float az = 0, el = 0;
 int cycle_time;
+
+uint8_t fcncode = 0;
+int APID = 0;
+int PktType = 0;
+
+float temp1 = 0;
+float temp2 = 0;
 
 sensors_event_t event; 
 
@@ -224,13 +220,13 @@ void cart2spher(imu::Vector<3> vec, float *theta, float *phi){
   *phi = atan2(sqrt(pow(vec(0),2)+pow(vec(1),2)),vec(2));
 }
 
-void enforcestops(float &az, float &el){
+void enforcestops(float *az, float *el){
   // enforce El between +/- 90
-  if(el < -(float)PI/2){
-    el = -(float)PI/2;
+  if(*el < -(float)PI/2){
+    *el = -(float)PI/2;
   }
-  else if(el*2 > (float)PI){
-    el = (float)PI/2;
+  else if(*el*2 > (float)PI){
+    *el = (float)PI/2;
   }
 }
 
@@ -653,7 +649,7 @@ void cmdResponse(uint8_t fcncode, uint8_t params[], uint8_t bytesread){
 		Serial.print("; ");
 		Serial.println(target_ned(2));
 		Serial.print("]");
-
+	// target_ned = imu::Vector<3>(1.0, 0.0, 0.0);
 	}
 	else if(fcncode == CMD_SetIMU2BODY){
 		float tmp_float, tmp_float1, tmp_float2, tmp_float3;
@@ -962,11 +958,11 @@ void loop() {
 		enforcestops(&az, &el);
 
 		// map command onto servo range
-		if(El_Cmd_Polarity){
-			  servo_cmd = map(el*180/PI,-90,90,0,180);
-		} else {
-		  servo_cmd = map(el*180/PI,-90,90,180,0);
-		}
+    if(El_Cmd_Polarity){
+		  servo_cmd = map(el*180/PI,-90,90,0,180);
+    } else {
+      servo_cmd = map(el*180/PI,-90,90,180,0);
+    }
 
 		// command servo
 		if(ServoEnableFlg){
@@ -976,7 +972,7 @@ void loop() {
 		tlm_len = compileTLM(tlmctrl);
 
 		sendTlmMsg( tlm_addr, telemetry_data, tlm_len);
-		tlmsentcnt++;
+    tlmsentcnt++;
 		logFile.println();
 		logFile.close();
 
