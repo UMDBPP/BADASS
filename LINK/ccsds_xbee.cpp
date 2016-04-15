@@ -244,7 +244,7 @@ data to be sent.
 Will send the data and print the SendCtr and the data sent to the serial.
 */ 
   
-  
+  Serial.print("Sending packet!!!");
   // create the message to be sent
   Tx16Request tx = Tx16Request(SendAddr, payload, payload_size);
   

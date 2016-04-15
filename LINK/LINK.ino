@@ -62,30 +62,30 @@ void setup() {
 void printPktInfo(CCSDS_PriHdr_t PriHeader, CCSDS_CmdSecHdr_t CmdHeader, CCSDS_TlmSecHdr_t TlmHeader){
     
     Serial.print("APID: ");
-    Serial.println(CCSDS_RD_APID(PriHeader));
-    Serial.print("SecHdr: ");
-    Serial.println(CCSDS_RD_SHDR(PriHeader));
-    Serial.print("Type: ");
-    Serial.println(CCSDS_RD_TYPE(PriHeader));
-    Serial.print("Ver: ");
-    Serial.println(CCSDS_RD_VERS(PriHeader));
-    Serial.print("SeqCnt: ");
-    Serial.println(CCSDS_RD_SEQ(PriHeader));
-    Serial.print("SegFlag: ");
-    Serial.println(CCSDS_RD_SEQFLG(PriHeader));
-    Serial.print("Len: ");
+    Serial.print(CCSDS_RD_APID(PriHeader));
+    Serial.print(", SecHdr: ");
+    Serial.print(CCSDS_RD_SHDR(PriHeader));
+    Serial.print(", Type: ");
+    Serial.print(CCSDS_RD_TYPE(PriHeader));
+    Serial.print(", Ver: ");
+    Serial.print(CCSDS_RD_VERS(PriHeader));
+    Serial.print(", SeqCnt: ");
+    Serial.print(CCSDS_RD_SEQ(PriHeader));
+    Serial.print(", SegFlag: ");
+    Serial.print(CCSDS_RD_SEQFLG(PriHeader));
+    Serial.print(", Len: ");
     Serial.println(CCSDS_RD_LEN(PriHeader));
 
     if(CCSDS_RD_TYPE(PriHeader)){
-      Serial.print("Cmd: ");
-      Serial.println(CCSDS_RD_FC(CmdHeader));
-      Serial.print("CkSum: ");
+      Serial.print("FcnCode: ");
+      Serial.print(CCSDS_RD_FC(CmdHeader));
+      Serial.print(", CkSum: ");
       Serial.println(CCSDS_RD_CHECKSUM(CmdHeader));
     }
     else{
       Serial.print("Sec: ");
-      Serial.println(CCSDS_RD_SEC_HDR_SEC(TlmHeader));
-      Serial.print("Subsec: ");
+      Serial.print(CCSDS_RD_SEC_HDR_SEC(TlmHeader));
+      Serial.print(", Subsec: ");
       Serial.println(CCSDS_RD_SEC_HDR_SUBSEC(TlmHeader));
     }
     
@@ -99,24 +99,29 @@ void loop() {
   // bytesRead is positive if there was data read
   XbeeBytesRead = readMsg(Buff_Xbee2900,1);
   
-  Serial.print("Xbee read status: ");
-  Serial.println(XbeeBytesRead);
-  
+  //Serial.print("Xbee read status: ");
+  //Serial.println(XbeeBytesRead);
+  Serial.println();
   // If data proccess and send 
   if (XbeeBytesRead > 0) {
+
+      //PriHeader = *(CCSDS_PriHdr_t*) (Buff_Xbee2900);
+      //CmdHeader = *(CCSDS_CmdSecHdr_t*) (Buff_Xbee2900+sizeof(CCSDS_PriHdr_t));
+      //TlmHeader = *(CCSDS_TlmSecHdr_t*) (Buff_Xbee2900+sizeof(CCSDS_PriHdr_t));
+
       // Convert inital bytes of packet into header structure
       memcpy(&PriHeader, Buff_Xbee2900, sizeof(CCSDS_PriHdr_t));
       memcpy(&CmdHeader, Buff_Xbee2900+6, sizeof(CCSDS_CmdSecHdr_t));
       memcpy(&TlmHeader, Buff_Xbee2900+6, sizeof(CCSDS_TlmSecHdr_t));
     
-      Serial.println("Received from xbee, forwards on serial: ");
+      Serial.println("Xbee -> Serial: ");
       printPktInfo(PriHeader, CmdHeader, TlmHeader);
         
         // Extract address 
         int AP_ID = CCSDS_RD_APID(PriHeader);
         // Check against desired addresses and send if matches
           if (AP_ID == Transmitted_AP_IDs[0] || AP_ID == Transmitted_AP_IDs[1]){
-            Serial.print("Sending on serial: ");
+            Serial.print("Sending: ");
             for (int i = 0; i < XbeeBytesRead; i++){
              // Print to 900s
              Serial.print(Buff_Xbee2900[i],HEX);
@@ -140,31 +145,33 @@ void loop() {
   // Read from 900s append to buffer     
   BytesRead900 = Serial2.readBytes(Buff_9002XbeeBuf+BytesinBuffer, Serial2.available());
   
-  Serial.print("Read bytes: ");
-  Serial.print(BytesRead900);
+  //Serial.print("Read bytes: ");
+  //Serial.print(BytesRead900);
   
   // updating counter
   BytesinBuffer += BytesRead900;
   
-  Serial.print(", BytesinBuf: ");
-  Serial.println(BytesinBuffer);
+  //Serial.print(", BytesinBuf: ");
+  //Serial.println(BytesinBuffer);
   
   // Looking for sync bytes 
   for(int i=0; i<BytesinBuffer; i++){
+
+    //PriHeader = *(CCSDS_PriHdr_t*) (Buff_9002XbeeBuf);
+    
     if(Buff_9002XbeeBuf[i] == SyncByte[0] & Buff_9002XbeeBuf[i+1] == SyncByte[1]) {
 
-      Serial.print("synch bytes: ");
-      Serial.print(Buff_9002XbeeBuf[i],HEX);
-      Serial.print(",  ");
-      Serial.println(Buff_9002XbeeBuf[i+i],HEX);
+      PriHeader = *(CCSDS_PriHdr_t*) (Buff_9002XbeeBuf+i);
+      CmdHeader = *(CCSDS_CmdSecHdr_t*) (Buff_9002XbeeBuf+i+sizeof(CCSDS_PriHdr_t));
+      TlmHeader = *(CCSDS_TlmSecHdr_t*) (Buff_9002XbeeBuf+i+sizeof(CCSDS_PriHdr_t));
       
       // Convert inital bytes of packet into header structure
-      memcpy(&PriHeader, Buff_9002XbeeBuf, sizeof(CCSDS_PriHdr_t));
-      memcpy(&CmdHeader, Buff_9002XbeeBuf+6, sizeof(CCSDS_CmdSecHdr_t));
-      memcpy(&TlmHeader, Buff_9002XbeeBuf+6, sizeof(CCSDS_TlmSecHdr_t));
+      //memcpy(&PriHeader, Buff_9002XbeeBuf, sizeof(CCSDS_PriHdr_t));
+      //memcpy(&CmdHeader, Buff_9002XbeeBuf+6, sizeof(CCSDS_CmdSecHdr_t));
+      //memcpy(&TlmHeader, Buff_9002XbeeBuf+6, sizeof(CCSDS_TlmSecHdr_t));
 
       // display debugging info
-      Serial.println("Received from serial, forwards on xbee: ");
+      Serial.println("Serial -> Xbee: ");
       printPktInfo(PriHeader, CmdHeader, TlmHeader);
           
       // Get the total length of packet
@@ -175,8 +182,16 @@ void loop() {
       // If you have a whole packet send it
       if(BytesinBuffer >= PacketLength+i){
 
-        Serial.print("Sending pkt bytes: ");
-        Serial.println(PacketLength);
+        Serial.print("Sending to: ");
+        Serial.print(AP_ID);
+        Serial.print(" ");
+        Serial.print(PacketLength);
+        Serial.println(" bytes");
+       // for(int ii=0;ii<PacketLength;ii++){
+       //   Serial.print(Buff_9002XbeeBuf[i+ii],HEX);
+       //   Serial.print(" ,");
+       // }
+       // Serial.println();
 
         // send the packet over the xbee
         sendData(AP_ID, Buff_9002XbeeBuf+i, PacketLength);
