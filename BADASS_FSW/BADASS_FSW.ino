@@ -90,7 +90,13 @@ Adafruit_ADS1015 ads(0x4A);
 
 // this bitfield, and the masks above, define which values get output in
 //  telemetry 
-uint32_t tlmctrl = 16761861;
+
+#define TLM_HK 16761861 // [
+#define TLM_ATT 901
+#define TLM_INT 62927874
+
+uint32_t tlmctrl = TLM_HK;
+//uint32_t tlmctrl = 0b0001000000000111;
 
 ////// Commanding 
 // these values define the fcncode corresponding to each command
@@ -101,7 +107,7 @@ uint32_t tlmctrl = 16761861;
 #define CMD_SetIMU2BODY 	0x04
 #define CMD_SetServoEnable  0x05
 #define CMD_SetRWEnable 	0x06 // Not yet implemented
-#define CMD_RequestTlmPt	0x07 // Not yet implemented
+#define CMD_RequestTlmPt	0x07
 #define CMD_SendTestPkt 	0x08
 #define CMD_SetTlmAddr 		0x09
 #define CMD_SetElPolarity 	0x0A
@@ -133,7 +139,7 @@ uint32_t tlmctrl = 16761861;
 uint16_t desiredcycletime = 2000; // [ms]
 
 // command the servo
-bool ServoEnableFlg = false;
+bool ServoEnableFlg = true;
 bool El_Cmd_Polarity = true;
 
 uint8_t op_mode = MODE_Auto;
@@ -712,6 +718,9 @@ void cmdResponse(uint8_t _fcncode, uint8_t params[], uint8_t bytesread){
 		Serial.println(tmp_uint8);
 	}
 	else if(_fcncode == CMD_RequestTlmPt){
+		Serial.print(" Sending TlmCtrl: ");
+    Serial.println(tmp_tlmctrl);
+		
 		uint32_t tmp_tlmctrl = 0;
 		uint8_t tmp_tlm_len = 0;
 		pkt_pos = extractFromTlm(tmp_tlmctrl, incomingByte, pkt_pos);
@@ -719,13 +728,11 @@ void cmdResponse(uint8_t _fcncode, uint8_t params[], uint8_t bytesread){
 		tmp_tlm_len = compileTLM(tmp_tlmctrl);
 		sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
 
-		Serial.print(" Sending TlmCtrl: ");
-		Serial.println(tmp_tlmctrl);
 	}
 	else if(_fcncode == CMD_SendTestPkt){
 		Serial.print(" Sending test packet");
 		
-		uint8_t telemetry_data[5] = {0x04, 0x03, 0x02, 0x01, 0x00};
+		uint8_t telemetry_data[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
 		sendTlmMsg( tlm_addr, telemetry_data, 0);
 	}
 	else if(_fcncode == CMD_SetTlmAddr){
@@ -828,7 +835,8 @@ void setup() {
 	// the ads does not return a status when started, so we can't 
 	Serial.print("Starting ADS initialization...");
 	ads.begin();
-  ads.setGain(GAIN_TWOTHIRDS);
+    ads.setGain(GAIN_TWOTHIRDS);
+    Serial.println("ADC Range: +/- 6.144V (1 bit = 3mV)");
 	Serial.println(" Initalized!"); 
 
 
