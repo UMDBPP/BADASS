@@ -76,6 +76,11 @@ function start_serial_monitor(varargin)
     end
     
     % open a log file
+    if(~exist(fullfile(fileparts(mfilename('fullpath')),'logs'),'dir'))
+        warning('start_serial_monitor:LogsDirMissing','Ground_Term/logs does not exist, creating it');
+        mkdir(fullfile(fileparts(mfilename('fullpath')),'logs'));
+        addpath(fullfile(fileparts(mfilename('fullpath')),'logs'));
+    end
     logfile = fopen('logs/log.txt','a');
     
     % assign the serial connection to the base workspace so the user can
@@ -179,11 +184,11 @@ function timerCallback(src, event, serConn, logfile)
         % append the new data to what we've read previously
         UserData.ByteBuffer = [UserData.ByteBuffer data];
         
-        for i = 1:length(UserData.ByteBuffer)
-            fprintf('%d',UserData.ByteBuffer(i))
-            fprintf(', ');
-        end
-        fprintf('\n');
+%         for i = 1:length(UserData.ByteBuffer)
+%             fprintf('%d',UserData.ByteBuffer(i))
+%             fprintf(', ');
+%         end
+%         fprintf('\n');
         
         % define the length of an xbee header
         xbee_hdr_len = 6;
@@ -196,7 +201,7 @@ function timerCallback(src, event, serConn, logfile)
             
             pkt_loc = pkt_loc(1);
             
-            fprintf('Found pkt at %d \n',pkt_loc)
+            fprintf('Found pkt at %d \n',pkt_loc);
             
             % extract the packet header
             if(pkt_loc+xbee_hdr_len < length(UserData.ByteBuffer))

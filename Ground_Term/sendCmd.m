@@ -1,4 +1,12 @@
 function arr = sendCmd(APID,FcnCode,varargin)
+% SENDCMD
+%
+%   sendCmd(APID,FcnCode)
+%       sends a command, selected by FcnCode, to APID
+%
+%   sendCmd(APID,FcnCode,varargin)
+%       sends a command, selected by FcnCode, to APID including parameters
+%
 
     % get streams from base workspace
     if(~evalin('base','exist(''serConn'',''var'')'))
@@ -12,7 +20,7 @@ function arr = sendCmd(APID,FcnCode,varargin)
     logfile = evalin('base','logfile');
     
     % create the command header
-    SeqCnt = 1;
+    SeqCnt = 2;
     SegFlag = 3;
     PktLen = 8; 
     arr = CreateCmdHdr(APID, SeqCnt, SegFlag, PktLen, FcnCode);
@@ -28,20 +36,36 @@ function arr = sendCmd(APID,FcnCode,varargin)
     CMD_SendTestPkt =  	hex2dec('08');
 	CMD_SetTlmAddr =	hex2dec('09');
 	CMD_SetElPolarity = hex2dec('0A');
+    CMD_SetMode = hex2dec('0B');
 
-    uint32_arg = [CMD_SetTlmCtrl CMD_RequestTlmPt];
+    uint32_arg = [CMD_RequestTlmPt];
     uint16_arg = [CMD_SetCycTime];
-    uint8_arg = [CMD_SetServoEnable CMD_SetRWEnable CMD_SetElPolarity CMD_SetTlmAddr];
+    uint8_arg = [CMD_SetServoEnable CMD_SetRWEnable CMD_SetElPolarity CMD_SetTlmAddr CMD_SetMode];
     no_arg = [CMD_SendTestPkt];
     three_float_args = [CMD_SetTargetNED];
     four_float_args = [CMD_SetIMU2BODY];
      
+    
+    % tlmctrl arg
+    if(ismember(FcnCode,CMD_SetTlmCtrl))
+        if(nargin ~= 3)
+           error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
+        end
+        tlmctrl_val = 0;
+        arg = varargin{1};
+        for i=1:length(arg)
+            tlmctrl_val = tlmctrl_val + 2^arg(i);
+        end
+        arr(12:-1:9) = typecast(uint32(tlmctrl_val),'uint8');
+        arr(13) = uint8(0);
+    end
     % 1 uint32 argument
     if(ismember(FcnCode,uint32_arg))
         if(nargin ~= 3)
            error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
         end
-        arr(9:12) = typecast(uint32(varargin{1}),'uint8');
+        arr(12:-1:9) = typecast(uint32(varargin{1}),'uint8');
+        arr(13) = uint8(0);
     end
     % 1 uint16 argument
     if(ismember(FcnCode,uint16_arg))
@@ -77,6 +101,7 @@ function arr = sendCmd(APID,FcnCode,varargin)
     fprintf('S %s: ', datestr(now,'HH:MM:SS.FFF'));
     fprintf(logfile,'S %s: ', datestr(now,'HH:MM:SS.FFF'));
 
+    % print the packet to the command line and log file
     for i=1:length(arr)
         fprintf('%02s',dec2hex(arr(i)));
         fprintf(logfile,'%02s',dec2hex(arr(i)));

@@ -41,6 +41,9 @@ TLM.alt = timeseries('Altitude');
 TLM.humid = timeseries('Humidity');
 TLM.current = timeseries('Current');
 TLM.voltage = timeseries('Voltage');
-
+TLM.initstat = timeseries('InitStatus');
+TLM.msgsent = timeseries('MsgSent');
+TLM.msgrcvd = timeseries('MsgRcvd');
+TLM.mode = timeseries('Mode');
 
 end

@@ -21,7 +21,7 @@ function [vec, data_idx] = extractvec(pktdata,data_idx,veclen,endianness)
             data_idx = data_idx + 4;
         else
             warning('extractvec:TooShort','Array doesn''t contain enough elements, returning -1')
-            vec{i} = -1;
+            vec(i) = -1;
         end
     end
 
