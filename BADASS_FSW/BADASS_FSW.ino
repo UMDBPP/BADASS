@@ -21,6 +21,9 @@
 #include <XBee.h>
 #include "CCSDS_xbee.h"
 
+extern uint32_t _SendCtr;
+extern uint32_t _RcvdCtr;
+
 // ***********************************
 // Definitions
 
@@ -58,38 +61,40 @@ Adafruit_ADS1015 ads;
 ////// Telemetry 
 // these values define positions in a bitfield which control wether or 
 //  not the telemetry point will be output in the nominal telemetry packet
-#define TLMMask_TlmCtrl        	0x00000001
-#define TLMMask_TargetNED 		0x00000002
-#define TLMMask_BNOCal 	    	0x00000004
-#define TLMMask_EulerAng   		0x00000008
-#define TLMMask_q_imu2body 		0x00000010
-#define TLMMask_q_ned2imu    	0x00000020
-#define TLMMask_q_ned2body		0x00000040
-#define TLMMask_v_targetbody  0x00000080
-#define TLMMask_AzElErr 	    0x00000100
-#define TLMMask_ElCmd		      0x00000200
-#define TLMMask_CycleTime  		0x00000400
-#define TLMMask_CmdRcvd   		0x00000800
-#define TLMMask_DesiredCycTime	0x00001000
-#define TLMMask_CmdEcho 	    0x00001000
-#define TLMMask_Temp1 	        0x00002000
-#define TLMMask_Temp2 		    0x00004000
-#define TLMMask_TempBME 	    0x00008000
-#define TLMMask_Pres       		0x00010000
-#define TLMMask_PresAlt    		0x00020000
-#define TLMMask_Humid     		0x00040000
-#define TlmMask_Current    		0x00080000
-#define TLMMask_Volt	    	  0x00100000
-#define TLMMask_InitStat    	0x00200000
-#define TLMMask_CmdCnt        0x00400000
-#define TLMMask_TlmCnt        0x00800000
+#define TLMMask_TlmCtrl       0x00000001  // 2^0
+#define TLMMask_TargetNED 		0x00000002  // 2^1
+#define TLMMask_BNOCal 	    	0x00000004  // 2^2
+#define TLMMask_EulerAng   		0x00000008  // 2^3
+#define TLMMask_q_imu2body 		0x00000010  // 2^4
+#define TLMMask_q_ned2imu    	0x00000020  // 2^5
+#define TLMMask_q_ned2body		0x00000040  // 2^6
+#define TLMMask_v_targetbody  0x00000080  // 2^7
+#define TLMMask_AzElErr 	    0x00000100  // 2^8
+#define TLMMask_ElCmd		      0x00000200  // 2^9
+#define TLMMask_CycleTime  		0x00000400  // 2^10
+#define TLMMask_CmdRcvd   		0x00000800  // 2^11
+#define TLMMask_DesiredCycTime	0x00001000  // 2^12
+#define TLMMask_CmdEcho 	    0x00001000  // 2^13
+#define TLMMask_Temp1 	        0x00002000  // 2^14
+#define TLMMask_Temp2 		    0x00004000  // 2^15
+#define TLMMask_TempBME 	    0x00008000  // 2^16
+#define TLMMask_Pres       		0x00010000  // 2^17
+#define TLMMask_PresAlt    		0x00020000  // 2^18
+#define TLMMask_Humid     		0x00040000  // 2^19
+#define TlmMask_Current    		0x00080000  // 2^20
+#define TLMMask_Volt	    	  0x00100000  // 2^21
+#define TLMMask_InitStat    	0x00200000  // 2^22
+#define TLMMask_MsgSent        	0x00400000  // 2^23
+#define TLMMask_MsgRcvd        	0x00800000  // 2^24
+#define TLMMask_Mode        	0x01000000  // 2^25
 
 // this bitfield, and the masks above, define which values get output in
 //  telemetry 
-uint32_t tlmctrl = 0b0000000000000111;
+uint32_t tlmctrl = 0b0001000000000111;
 
 ////// Commanding 
 // these values define the fcncode corresponding to each command
+// 0x01 doesnt work
 #define CMD_SetTlmCtrl     	0x01
 #define CMD_SetCycTime     	0x02
 #define CMD_SetTargetNED 	0x03
@@ -99,7 +104,8 @@ uint32_t tlmctrl = 0b0000000000000111;
 #define CMD_RequestTlmPt	0x07 // Not yet implemented
 #define CMD_SendTestPkt 	0x08
 #define CMD_SetTlmAddr 		0x09
-#define CMD_SetElPolarity 0x0A
+#define CMD_SetElPolarity 	0x0A
+#define CMD_SetMode 		0x0B
 
 ////// Sensors 
 // defines bits in initstatus for sensor status
@@ -111,6 +117,10 @@ uint32_t tlmctrl = 0b0000000000000111;
 #define SD_MASK 	    0x0020
 #define xbee_MASK		0x0040
 #define servo_MASK 		0x0080
+
+////// Modes
+#define MODE_Manual 	0x00
+#define MODE_Auto  		0x01
 
 // ***********************************
 // Initalizations
@@ -125,6 +135,8 @@ uint16_t desiredcycletime = 2000; // [ms]
 // command the servo
 bool ServoEnableFlg = false;
 bool El_Cmd_Polarity = true;
+
+uint8_t op_mode = MODE_Auto;
 
 // target in the NED frame
 imu::Vector<3> target_ned = imu::Vector<3>(1.0, 0.0, 0.0);
@@ -170,7 +182,9 @@ uint16_t xbee_PanID = 0x0B0B;
 uint8_t sys_cal = 0, gyro_cal = 0, accel_cal = 0, mag_cal = 0;
 uint8_t sys_stat = 0, st_res = 0, sys_err = 0;
 int i = 0;
-float az = 0, el = 0;
+float pterr_az = 0.0, pterr_el = 0.0;
+float cmd_az_ang = 0.0, cmd_el_ang = 0.0;
+float man_el_ang = 0.0;
 int cycle_time;
 
 uint8_t fcncode = 0;
@@ -215,18 +229,18 @@ static inline int8_t sgn(int val) {
  return 1;
 }
 
-void cart2spher(imu::Vector<3> vec, float *theta, float *phi){
-  *theta = atan2(vec(1),vec(0));
-  *phi = atan2(sqrt(pow(vec(0),2)+pow(vec(1),2)),vec(2));
+void cart2spher(imu::Vector<3> vec, float &theta, float &phi){
+  theta = atan2(vec(1),vec(0));
+  phi = atan2(sqrt(pow(vec(0),2)+pow(vec(1),2)),vec(2));
 }
 
-void enforcestops(float *az, float *el){
+void enforcestops(float &az, float &el){
   // enforce El between +/- 90
-  if(*el < -(float)PI/2){
-    *el = -(float)PI/2;
+  if(el < -(float)PI/2){
+    el = -(float)PI/2;
   }
-  else if(*el*2 > (float)PI){
-    *el = (float)PI/2;
+  else if(el*2 > (float)PI){
+    el = (float)PI/2;
   }
 }
 
@@ -433,20 +447,20 @@ uint8_t compileTLM(uint32_t tlmctrl){
 	logFile.print(", ");
 
 	if(tlmctrl & TLMMask_AzElErr){
-		tlm_pos = addFloatToTlm( az, telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( el, telemetry_data, tlm_pos);
+		tlm_pos = addFloatToTlm( pterr_az, telemetry_data, tlm_pos);
+		tlm_pos = addFloatToTlm( pterr_el, telemetry_data, tlm_pos);
 
 		Serial.print(" az_el err: ");
 		Serial.print("[");
-		Serial.print(az,4);
+		Serial.print(pterr_az,4);
 		Serial.print("; ");
-		Serial.print(el,4);
+		Serial.print(pterr_el,4);
 		Serial.print("]");
 	}
 
-	logFile.print(az, 4);
+	logFile.print(pterr_az, 4);
 	logFile.print(", ");
-	logFile.print(el, 4);
+	logFile.print(pterr_el, 4);
 	logFile.print(", ");
 
 	if(tlmctrl & TLMMask_ElCmd){
@@ -589,27 +603,37 @@ uint8_t compileTLM(uint32_t tlmctrl){
 	logFile.print(initstatus);
 	logFile.print(", ");
   
-  if(tlmctrl & TLMMask_CmdCnt){
-    tlm_pos = addIntToTlm(cmdrcvdcnt, telemetry_data, tlm_pos);
+	if(tlmctrl & TLMMask_MsgSent){
+		tlm_pos = addIntToTlm(_SendCtr, telemetry_data, tlm_pos);
 
-    Serial.print(" cmdcnt: ");
-    Serial.print(cmdrcvdcnt);
-  }
+		Serial.print(" msg sent: ");
+		Serial.print(_SendCtr);
+	}
 
-  logFile.print(initstatus);
-  logFile.print(", ");
+	logFile.print(_SendCtr);
+	logFile.print(", ");
 
-  if(tlmctrl & TLMMask_TlmCnt){
-    tlm_pos = addIntToTlm(tlmsentcnt, telemetry_data, tlm_pos);
+	if(tlmctrl & TLMMask_MsgRcvd){
+		// counter maintained by ccsds_xbee.c
+		tlm_pos = addIntToTlm(_RcvdCtr, telemetry_data, tlm_pos);
 
-    Serial.print(" tlmcnt: ");
-    Serial.print(tlmsentcnt);
-  }
+		Serial.print(" tlmcnt: ");
+		Serial.print(_RcvdCtr);
+	}
 
-  logFile.print(initstatus);
-  logFile.print(", ");
+	logFile.print(_RcvdCtr);
+	logFile.print(", ");
 
+	if(tlmctrl & TLMMask_Mode){
+		tlm_pos = addIntToTlm(op_mode, telemetry_data, tlm_pos);
 
+		Serial.print(" mode: ");
+		Serial.print(op_mode);
+	}
+
+	logFile.print(op_mode);
+	logFile.print(", ");
+  
 	if(tlmctrl){
 		Serial.println(" ");
 	}
@@ -617,23 +641,29 @@ uint8_t compileTLM(uint32_t tlmctrl){
 	return tlm_pos;
 }
 
-void cmdResponse(uint8_t fcncode, uint8_t params[], uint8_t bytesread){
+void cmdResponse(uint8_t _fcncode, uint8_t params[], uint8_t bytesread){
+  
+  uint32_t tmp_tlmctrl = 0x00001000;
+  uint8_t tmp_tlm_len = 0;
+  tmp_tlm_len = extractFromTlm(tmp_tlmctrl, incomingByte, tmp_tlm_len);
+  tmp_tlm_len = extractFromTlm(fcncode, incomingByte, tmp_tlm_len);
+  sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
+  
 	uint8_t pkt_pos = 0;
-	Serial.println("Cmd response");
 
-	if(fcncode == CMD_SetTlmCtrl){
+	if(_fcncode == CMD_SetTlmCtrl){
 		pkt_pos = extractFromTlm(tlmctrl, incomingByte, pkt_pos);
 
 		Serial.print(" TlmCtrlCmd: ");
 		Serial.println(tlmctrl);
 	}
-	else if(fcncode == CMD_SetCycTime){
+	else if(_fcncode == CMD_SetCycTime){
 		pkt_pos = extractFromTlm(desiredcycletime, incomingByte, pkt_pos);
 
 		Serial.print(" Setting DesiredCycTime to: ");
 		Serial.println(desiredcycletime);
 	}
-	else if(fcncode == CMD_SetTargetNED){
+	else if(_fcncode == CMD_SetTargetNED){
 		float tmp_float = 0.0;
 		pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
 		target_ned(0) = tmp_float;
@@ -643,15 +673,15 @@ void cmdResponse(uint8_t fcncode, uint8_t params[], uint8_t bytesread){
 		target_ned(2) = tmp_float;
 
 		Serial.print(" Setting TargetNED to: [");
-		Serial.println(target_ned(0));
+		Serial.print(target_ned(0));
 		Serial.print("; ");
-		Serial.println(target_ned(2));
+		Serial.print(target_ned(2));
 		Serial.print("; ");
-		Serial.println(target_ned(2));
-		Serial.print("]");
+		Serial.print(target_ned(2));
+		Serial.println("]");
 	// target_ned = imu::Vector<3>(1.0, 0.0, 0.0);
 	}
-	else if(fcncode == CMD_SetIMU2BODY){
+	else if(_fcncode == CMD_SetIMU2BODY){
 		float tmp_float, tmp_float1, tmp_float2, tmp_float3;
 		pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
 		pkt_pos = extractFromTlm(tmp_float1, incomingByte, pkt_pos);
@@ -660,63 +690,81 @@ void cmdResponse(uint8_t fcncode, uint8_t params[], uint8_t bytesread){
 		quat_imu2body = imu::Quaternion(tmp_float, tmp_float1, tmp_float2, tmp_float3);
 
 		Serial.print(" Setting IMU2Body to: [");
-		Serial.println(tmp_float);
+		Serial.print(tmp_float);
 		Serial.print("; ");
-		Serial.println(tmp_float);
+		Serial.print(tmp_float);
 		Serial.print("; ");
-		Serial.println(tmp_float);
+		Serial.print(tmp_float);
 		Serial.print("; ");
-		Serial.println(tmp_float);
-		Serial.print("]");
+		Serial.print(tmp_float);
+		Serial.println("]");
 	}
-	else if(fcncode == CMD_SetServoEnable){
+	else if(_fcncode == CMD_SetServoEnable){
 		extractFromTlm(ServoEnableFlg, incomingByte, pkt_pos);
 
 		Serial.print(" Setting ServoEnable to: ");
 		Serial.println(incomingByte[9]);
 	}
-	else if(CMD_SetRWEnable){
+	else if(_fcncode == CMD_SetRWEnable){
 		uint8_t tmp_uint8 = 0;
-		Serial.print(" Setting ServoEnable to: ");
+		Serial.print(" Setting RWEnable to: ");
 		pkt_pos = extractFromTlm(tmp_uint8, incomingByte, pkt_pos);
 		Serial.println(tmp_uint8);
 	}
-	else if(fcncode == CMD_RequestTlmPt){
-		uint32_t tmp_uint32 = 0;
-		pkt_pos = extractFromTlm(tmp_uint32, incomingByte, pkt_pos);
+	else if(_fcncode == CMD_RequestTlmPt){
+		uint32_t tmp_tlmctrl = 0;
+		uint8_t tmp_tlm_len = 0;
+		pkt_pos = extractFromTlm(tmp_tlmctrl, incomingByte, pkt_pos);
 
-		Serial.print(" Setting RequestTlm to: [");
-		Serial.println(tmp_uint32);
+		tmp_tlm_len = compileTLM(tmp_tlmctrl);
+		sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
+
+		Serial.print(" Sending TlmCtrl: ");
+		Serial.println(tmp_tlmctrl);
 	}
-	else if(fcncode == CMD_SendTestPkt){
+	else if(_fcncode == CMD_SendTestPkt){
 		Serial.print(" Sending test packet");
 		
 		uint8_t telemetry_data[5] = {0x04, 0x03, 0x02, 0x01, 0x00};
 		sendTlmMsg( tlm_addr, telemetry_data, 0);
 	}
-	else if(fcncode == CMD_SetTlmAddr){
+	else if(_fcncode == CMD_SetTlmAddr){
 		pkt_pos = extractFromTlm(tlm_addr, incomingByte, pkt_pos);
 		Serial.print(" Setting tlm addr:");
-		Serial.print(tlm_addr);
+		Serial.println(tlm_addr);
 	}
- else if(fcncode == CMD_SetElPolarity){
-    pkt_pos = extractFromTlm(El_Cmd_Polarity, incomingByte, pkt_pos);
-    Serial.print(" El cmd polarity:");
-    Serial.print(El_Cmd_Polarity);
+	else if(_fcncode == CMD_SetElPolarity){
+		pkt_pos = extractFromTlm(El_Cmd_Polarity, incomingByte, pkt_pos);
+		Serial.print(" El cmd polarity:");
+		Serial.println(El_Cmd_Polarity);
+	}
+	else if(_fcncode == CMD_SetMode){
+		pkt_pos = extractFromTlm(op_mode, incomingByte, pkt_pos);
+		Serial.print(" Mode: ");
+		Serial.println(op_mode);
+		
+		if(op_mode == MODE_Manual)
+			pkt_pos = extractFromTlm(man_el_ang, incomingByte, pkt_pos);
+			Serial.print(" El: ");
+			Serial.println(man_el_ang);
+	}
+ else{
+    Serial.print("Unrecongized command...");
  }
+	
 }
 
-void calcPtErr(imu::Vector<3> target_body, imu::Vector<3> x_axis, imu::Vector<3> y_axis){
+void calcPtErr(imu::Vector<3> target_body, imu::Vector<3> x_axis, imu::Vector<3> y_axis, float &pterr_az, float &pterr_el){
 	
 	// calculate az error
-    az = atan2(target_body(1),target_body(0));
+    pterr_az = atan2(target_body(1),target_body(0));
 
     // calculate el error
     in_plane_tgt = normtoplane(y_axis, target_body);
     in_plane_tgt.normalize();
-    el = acos(in_plane_tgt.dot(x_axis));
+    pterr_el = acos(in_plane_tgt.dot(x_axis));
     if(in_plane_tgt(2) < 0){
-      el = - el;
+      pterr_el = - pterr_el;
     }
 }
 
@@ -873,7 +921,10 @@ void setup() {
 
 	Serial.print("Initialization finished with status: ");
 	Serial.println(initstatus);
-
+ 
+  Serial.print("Starting in mode: ");
+  Serial.println(op_mode);
+  
   // send init packet
   uint8_t tlm_pos = addIntToTlm(TLMMask_InitStat & 0xFFFFFFFF, telemetry_data, (uint8_t) 0);
   tlm_pos = addIntToTlm(initstatus, telemetry_data, tlm_pos);
@@ -886,7 +937,13 @@ void getInput(){
 // 		if it has
 	
 	// check if there's data to be read
-	if ((pkt_type = readMsg(1)) > -1) {
+
+  if((pkt_type = readMsg(1)) == 0){
+    Serial.println("Read something else, reading again");
+    pkt_type = readMsg(1);
+  }
+ 
+	if (pkt_type > -1 ) {
 
 		// print info about the packet
 		printPktInfo();
@@ -894,7 +951,8 @@ void getInput(){
 		// process based on command or telemetry packet
 		if(pkt_type){
 			bytesread = readCmdMsg(incomingByte, fcncode);
-
+      Serial.print("Fcncode: ");
+      Serial.print(fcncode);
 			// response to command
 			cmdResponse(fcncode, incomingByte, bytesread);
       cmdrcvdcnt++;
@@ -904,6 +962,9 @@ void getInput(){
 			// 	anything to do with it
 			bytesread = readTlmMsg(incomingByte);
 		}
+	} else if(pkt_type < -1){
+    Serial.print("Failed to read xbee with code: ");
+    Serial.println(pkt_type);
 	}
 }
 
@@ -911,17 +972,19 @@ void getInput(){
 // ***********************************
 // Loop
 void loop() {
+
+
+  getInput();
+  
 	cycle_time = millis() - cycle_start_time;
 
 	// only start next cycle if we've waited long enough
 	if(cycle_time > desiredcycletime){
 		cycle_start_time = millis();
-
+    
 		logFile = SD.open(filename, FILE_WRITE);
 		logFile.write(cycle_start_time);
 		logFile.write(", ");
-
-		getInput();
 
 		temp1 = tempsensor1.readTempC();
 		temp2 = tempsensor2.readTempC();
@@ -953,17 +1016,27 @@ void loop() {
 		target_body.normalize();
 
 		// calculate pointing error
-		calcPtErr(target_body, x_axis, y_axis);
+		calcPtErr(target_body, x_axis, y_axis, pterr_az, pterr_el);
 
+		// if we're in manual mode, override the calculated angle
+		if(op_mode == MODE_Manual){
+			//for now
+			cmd_az_ang = pterr_az;
+			cmd_el_ang = man_el_ang;
+		} else {
+			cmd_az_ang = pterr_az;
+			cmd_el_ang = pterr_el;
+		}
+		
 		// enforce actuator stops before commanding
-		enforcestops(&az, &el);
-
+		enforcestops(cmd_az_ang, cmd_el_ang);
+		
 		// map command onto servo range
-    if(El_Cmd_Polarity){
-		  servo_cmd = map(el*180/PI,-90,90,0,180);
-    } else {
-      servo_cmd = map(el*180/PI,-90,90,180,0);
-    }
+		if(El_Cmd_Polarity){
+			servo_cmd = map(cmd_el_ang*180/PI,-90,90,0,180);
+		} else {
+			servo_cmd = map(cmd_el_ang*180/PI,-90,90,180,0);
+		}
 
 		// command servo
 		if(ServoEnableFlg){
@@ -973,7 +1046,7 @@ void loop() {
 		tlm_len = compileTLM(tlmctrl);
 
 		sendTlmMsg( tlm_addr, telemetry_data, tlm_len);
-    tlmsentcnt++;
+		tlmsentcnt++;
 		logFile.println();
 		logFile.close();
 

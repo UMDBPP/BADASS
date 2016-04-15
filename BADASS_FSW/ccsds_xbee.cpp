@@ -25,7 +25,7 @@ int _bytesread;
 
 uint32_t _SendCtr = 0;
 
-uint32_t _RecvCtr = 0;
+uint32_t _RcvdCtr = 0;
 
 void printHex(int num, int precision) {
      char tmp[16];
@@ -457,18 +457,18 @@ void printPktInfo(){
 
   // print info about the packet
   Serial.print("APID: ");
-  Serial.println(CCSDS_RD_APID(_PriHeader));
-  Serial.print("SecHdr: ");
-  Serial.println(CCSDS_RD_SHDR(_PriHeader));
-  Serial.print("Type: ");
-  Serial.println(CCSDS_RD_TYPE(_PriHeader));
-  Serial.print("Ver: ");
-  Serial.println(CCSDS_RD_VERS(_PriHeader));
-  Serial.print("SeqCnt: ");
-  Serial.println(CCSDS_RD_SEQ(_PriHeader));
-  Serial.print("SegFlag: ");
-  Serial.println(CCSDS_RD_SEQFLG(_PriHeader));
-  Serial.print("Len: ");
+  Serial.print(CCSDS_RD_APID(_PriHeader));
+  Serial.print(", SecHdr: ");
+  Serial.print(CCSDS_RD_SHDR(_PriHeader));
+  Serial.print(", Type: ");
+  Serial.print(CCSDS_RD_TYPE(_PriHeader));
+  Serial.print(", Ver: ");
+  Serial.print(CCSDS_RD_VERS(_PriHeader));
+  Serial.print(", SeqCnt: ");
+  Serial.print(CCSDS_RD_SEQ(_PriHeader));
+  Serial.print(", SegFlag: ");
+  Serial.print(CCSDS_RD_SEQFLG(_PriHeader));
+  Serial.print(", Len: ");
   Serial.println(CCSDS_RD_LEN(_PriHeader));
 
   // process command and telemetry secondary headers
@@ -482,8 +482,8 @@ void printPktInfo(){
     _CmdSecHeader = *(CCSDS_CmdSecHdr_t*) (_packet_data+sizeof(_PriHeader));
 
     // print the command-specific data
-    Serial.print("Cmd: ");
-    Serial.println(CCSDS_RD_FC(_CmdSecHeader));
+    Serial.print("FcnCode: ");
+    Serial.print(CCSDS_RD_FC(_CmdSecHeader));
     Serial.print("CkSum: ");
     Serial.println(CCSDS_RD_CHECKSUM(_CmdSecHeader));
   }
@@ -498,7 +498,7 @@ void printPktInfo(){
 
     // print the telemetry-specific data
     Serial.print("Sec: ");
-    Serial.println(CCSDS_RD_SEC_HDR_SEC(_TlmSecHeader));
+    Serial.print(CCSDS_RD_SEC_HDR_SEC(_TlmSecHeader));
     Serial.print("Subsec: ");
     Serial.println(CCSDS_RD_SEC_HDR_SUBSEC(_TlmSecHeader));
   }   
@@ -531,10 +531,10 @@ its effect on the rest of the program.
   // wait for the message
   // NOTE: THIS IS BLOCKING
   if (xbee.readPacket(timeout)){
-     Serial.println("Read pkt ");
+     //Serial.println("Read pkt ");
       // if its a znet tx status            	
   	if (xbee.getResponse().getApiId() == TX_STATUS_RESPONSE) {
-          Serial.print(F("Received response..."));
+          //Serial.print(F("Received response..."));
                 
       // create response object for the message we're sending
       TxStatusResponse txStatus = TxStatusResponse();
@@ -544,18 +544,18 @@ its effect on the rest of the program.
   	   // get the delivery status, the fifth byte
          if (txStatus.getStatus() == SUCCESS) {
           	// success.  time to celebrate
-                Serial.print(F("ACK!"));
+                //Serial.print(F("ACK!"));
                 return 0;
          } else {
           	// the remote XBee did not receive our packet. sadface.
-                Serial.print(F("Not ACK"));
+                //Serial.print(F("Not ACK"));
                 return 0;
          }
       }
      else if( xbee.getResponse().getApiId() == RX_16_RESPONSE) {
        
       // record the new packet
-      _RecvCtr++;
+      _RcvdCtr++;
       
       Serial.print(F("Received Message..."));
        
