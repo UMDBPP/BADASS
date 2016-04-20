@@ -32,4 +32,4 @@ Interface with Arduino
 ESC Calibration
 	On poweron, you should hear three increasing beeps and then a fourth. Then calibrate by setting the value to the off position: 1460.
 		Lack of a fourth beep means that the ESC is not detecting the input pulse. Try going through all values and try powering off and on again. If this fails, there is another problem, possibly wiht the ESC itselft. We had this error when a resistor failed. If this happens, call Camden.
-	After that, it may or may not require going to the max and min values. Calibration is done at this point.
+	After that, it may or may not require going to the max and min values (1060 and 1860). Calibration is done at this point.
