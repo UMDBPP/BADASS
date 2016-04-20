@@ -335,7 +335,7 @@ int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payloa
   CCSDS_WR_TYPE(_PriHeader,1);
   CCSDS_WR_VERS(_PriHeader,0);
   CCSDS_WR_SEQ(_PriHeader,_SendCtr);
-  CCSDS_WR_SEQFLG(_PriHeader,0x03);
+  CCSDS_WR_SEQFLG(_PriHeader,0x03); // initially set to zero because we cannot actually compute the checksum of the entire packet at this point.
   CCSDS_WR_LEN(_PriHeader,payload_size+sizeof(_PriHeader)+sizeof(_CmdSecHeader));
 
   // fill secondary header fields
@@ -354,7 +354,7 @@ int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payloa
   memcpy(packet_data+sizeof(_PriHeader)+sizeof(_CmdSecHeader), payload, payload_size);
 
   // add the actual checksum
-  packet_data[sizeof(_PriHeader)] = CCSDS_ComputeCheckSum(packet_data, (uint8_t) payload_size);
+  packet_data[sizeof(_PriHeader)] = CCSDS_ComputeCheckSum(packet_data, (uint8_t) payload_size); // assume that the checksum is the first byte of the secondary header
 
   // send the message
   _sendData(SendAddr, packet_data, payload_size);
