@@ -394,7 +394,9 @@ int readMsg(uint16_t timeout){
 }
 
 int readCmdMsg(uint8_t params[], uint8_t &fcncode){
-
+  if (!CCSDS_ValidCheckSum(_packet_data, (uint8_t) _bytesread)) {
+    return -1;
+  }
   // declare the header structures
   CCSDS_PriHdr_t _PriHeader;
 
