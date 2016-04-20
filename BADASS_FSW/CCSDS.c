@@ -1,23 +1,21 @@
 #include "ccsds.h"
 
 
-bool CCSDS_ValidCheckSum (CCSDS_CmdPkt_t *PktPtr)
-{
+bool CCSDS_ValidCheckSum (uint8_t array[], uint8_t size) {
 
-   return (CCSDS_ComputeCheckSum(PktPtr) == 0);
+	return (CCSDS_ComputeCheckSum(array,size) == 0);
 
 } /* END CCSDS_ValidCheckSum() */
 
 
-uint8_t CCSDS_ComputeCheckSum (CCSDS_CmdPkt_t *PktPtr)
-{
-   uint16_t   PktLen   = CCSDS_RD_LEN(PktPtr->PriHdr);
-   uint8_t   *BytePtr  = (uint8_t *)PktPtr;
-   uint8_t    CheckSum;
+uint8_t CCSDS_ComputeCheckSum (uint8_t array[], uint8_t size) {
+	uint8_t    CheckSum;
+	checksum = 0xFF;
 
-   CheckSum = 0xFF;
-   while (PktLen--)  CheckSum ^= *(BytePtr++);
+	for (uint8_t i = 0; i < size; i++) {
+		checksum ^= array[i];
+	}
 
-   return CheckSum;
+	return checksum;
 
 } /* END CCSDS_ComputeCheckSum() */

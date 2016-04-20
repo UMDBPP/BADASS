@@ -204,9 +204,9 @@ union {
 } TlmHeader_u;
 
 // Function prototypes
-bool CCSDS_ValidCheckSum (CCSDS_CmdPkt_t *PktPtr);
+bool CCSDS_ValidCheckSum (uint8_t array[], uint8_t size);
 
-uint8_t CCSDS_ComputeCheckSum (CCSDS_CmdPkt_t *PktPtr);
+uint8_t CCSDS_ComputeCheckSum (uint8_t array[], uint8_t size);
 
 #endif  /* _ccsds_ */
 
