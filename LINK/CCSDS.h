@@ -4,140 +4,7 @@
 #include "stdint.h"
 #include "stdbool.h"
 
-/*
-** Include Files
-*/
-
-/* Macro to convert 16 bit word from platform "endianness" to Big Endian */
-#ifdef SOFTWARE_BIG_BIT_ORDER
-  #define CFE_MAKE_BIG16(n) (n)
-#else
-  #define CFE_MAKE_BIG16(n) ( (((n) << 8) & 0xFF00) | (((n) >> 8) & 0x00FF) )
-#endif
-
-
-/* CCSDS_TIME_SIZE is specific to the selected CFE_SB time format */
-#if (CFE_SB_PACKET_TIME_FORMAT == CFE_SB_TIME_32_16_SUBS)
-  /* 32 bits seconds + 16 bits subseconds */
-  #define CCSDS_TIME_SIZE 6
-#elif (CFE_SB_PACKET_TIME_FORMAT == CFE_SB_TIME_32_32_SUBS)
-  /* 32 bits seconds + 32 bits subseconds */
-  #define CCSDS_TIME_SIZE 8
-#elif (CFE_SB_PACKET_TIME_FORMAT == CFE_SB_TIME_32_32_M_20)
-  /* 32 bits seconds + 20 bits microsecs + 12 bits reserved */
-  #define CCSDS_TIME_SIZE 8
-#else
-  /* unknown format */
-  #error unable to define CCSDS_TIME_SIZE!
-#endif
-
-
-/*
-** Type Definitions
-*/
-
-/**********************************************************************
-** Structure definitions for CCSDS headers.  All items in the structure
-** must be aligned on 16-bit words.  Bitfields must be avoided since
-** some compilers (such as gcc) force them into 32-bit alignment.
-**********************************************************************/
-
-/*----- CCSDS packet primary header. -----*/
-
-typedef struct {
-
-   uint8_t   StreamId[2];  /* packet identifier word (stream ID) */
-      /*  bits  shift   ------------ description ---------------- */
-      /* 0x07FF    0  : application ID                            */
-      /* 0x0800   11  : secondary header: 0 = absent, 1 = present */
-      /* 0x1000   12  : packet type:      0 = TLM, 1 = CMD        */
-      /* 0xE000   13  : CCSDS version, always set to 0            */
-
-   uint8_t   Sequence[2];  /* packet sequence word */
-      /*  bits  shift   ------------ description ---------------- */
-      /* 0x3FFF    0  : sequence count                            */
-      /* 0xC000   14  : segmentation flags:  3 = complete packet  */
-
-   uint8_t  Length[2];     /* packet length word */
-      /*  bits  shift   ------------ description ---------------- */
-      /* 0xFFFF    0  : (total packet length) - 7                 */
-
-} CCSDS_PriHdr_t;
-
-/*----- CCSDS command secondary header. -----*/
-
-typedef struct {
-
-   uint16_t  Command;      /* command secondary header */
-      /*  bits  shift   ------------ description ---------------- */
-      /* 0x00FF    0  : checksum, calculated by ground system     */
-      /* 0x7F00    8  : command function code                     */
-      /* 0x8000   15  : reserved, set to 0                        */
-
-} CCSDS_CmdSecHdr_t;
-
-/*----- CCSDS telemetry secondary header. -----*/
-
-typedef struct {
-
-   uint8_t  Time[CCSDS_TIME_SIZE];
-
-} CCSDS_TlmSecHdr_t;
-
-/*----- Generic combined command header. -----*/
-
-typedef struct {
-   CCSDS_PriHdr_t       PriHdr;
-   CCSDS_CmdSecHdr_t    SecHdr;
-} CCSDS_CmdPkt_t;
-
-/*----- Generic combined telemetry header. -----*/
-
-typedef struct {
-   CCSDS_PriHdr_t       PriHdr;
-   CCSDS_TlmSecHdr_t    SecHdr;
-} CCSDS_TlmPkt_t;
-
-
-/*
-** Macro Definitions
-*/
-
-/**********************************************************************
-** Constant values.
-**********************************************************************/
-
-/* Value of packet type for a telemetry packet. */
-#define CCSDS_TLM  0
-/* Value of packet type for a command packet. */
-#define CCSDS_CMD  1
-
-/* Value of secondary header flag if secondary header not present. */
-#define CCSDS_NO_SEC_HDR   0
-/* Value of secondary header flag if secondary header exists. */
-#define CCSDS_HAS_SEC_HDR  1
-
-#define NUM_CCSDS_APIDS        2048
-#define NUM_CCSDS_PKT_TYPES    2
-
-
-/**********************************************************************
-** Initial values for CCSDS header fields.
-**********************************************************************/
-
-/* Initial value of the sequence count. */
-#define CCSDS_INIT_SEQ      0
-/* Initial value of the sequence flags. */
-#define CCSDS_INIT_SEQFLG   3
-/* Initial value of the command function code. */
-#define CCSDS_INIT_FC       0
-/* Initial value of the command checksum. */
-#define CCSDS_INIT_CHECKSUM 0
-
-/* Note: the stream ID and length are always explicitly set for a packet,
-** so default values are not required.  */
-
-
+#define CCSDS_TIME_SIZE 6
 /**********************************************************************
 ** Macros for reading and writing bit fields in a 16-bit integer.
 ** These are used to implement the read and write macros below.
@@ -150,9 +17,7 @@ typedef struct {
 /* Shift 'value' up by 'shift' and write to those bits in 'word' that
 ** are specified by 'mask'.  Other bits in 'word' are unchanged.   */
 #define CCSDS_WR_BITS(word,mask,shift,value) \
-   ((word) = (uint16)(((word) & ~mask) | (((value) & (mask >> shift)) << shift)))
-
-
+   ((word) = (uint16_t)(((word) & ~mask) | (((value) & (mask >> shift)) << shift)))
 /**********************************************************************
 ** Macros for reading and writing the fields in a CCSDS header.  All
 ** of the macros are used in a similar way:
@@ -167,7 +32,6 @@ typedef struct {
 ** The CCSDS_WR_xxx macros may refer to 'header' more than once; thus
 ** the expression for 'header' must NOT contain any side effects.
 **********************************************************************/
-
 /* Read entire stream ID from primary header. */
 #define CCSDS_RD_SID(phdr)         (((phdr).StreamId[0] << 8) + ((phdr).StreamId[1]))
 /* Write entire stream ID to primary header. */
@@ -222,26 +86,11 @@ typedef struct {
 /* Write checksum to command secondary header. */
 #define CCSDS_WR_CHECKSUM(shdr,val) CCSDS_WR_BITS((shdr).Command, 0x00FF, 0, val)
 
+#define CCSDS_WR_SEC_HDR_SUBSEC(shdr, value) shdr.Time[4] = ((value>>8)  & 0xFF),  \
+                                             shdr.Time[5] = ((value)     & 0xFF)
 
-/**********************************************************************
-** Macros for clearing a CCSDS header to a standard initial state.  All
-** of the macros are used in a similar way:
-**   CCSDS_CLR_xxx_HDR(header)      -- Clear header of type xxx.
-**********************************************************************/
-
-/* Clear primary header. */
-#define CCSDS_CLR_PRI_HDR(phdr) \
-  ( (phdr).StreamId[0] = 0,\
-    (phdr).StreamId[1] = 0,\
-    (phdr).Sequence[0] = (CCSDS_INIT_SEQFLG << 6),\
-    (phdr).Sequence[1] = 0,\
-    (phdr).Length[0] = 0, \
-    (phdr).Length[1] = 0 )
-
-/* Clear command secondary header. */
-#define CCSDS_CLR_CMDSEC_HDR(shdr) \
-  ( (shdr).Command = (CCSDS_INIT_CHECKSUM << 0) | (CCSDS_INIT_FC << 8) )
-
+#define CCSDS_RD_SEC_HDR_SUBSEC(shdr)        (((uint32_t)shdr.Time[4]) << 8)  | \
+                                             ((uint32_t)shdr.Time[5])
 
 #define CCSDS_WR_SEC_HDR_SEC(shdr, value)    shdr.Time[0] = ((value>>24) & 0xFF),  \
                                              shdr.Time[1] = ((value>>16) & 0xFF),  \
@@ -252,48 +101,109 @@ typedef struct {
                                              (((uint32_t)shdr.Time[1]) << 16) | \
                                              (((uint32_t)shdr.Time[2]) << 8)  | \
                                              ((uint32_t)shdr.Time[3])
+                                             
+/**********************************************************************
+** Macros for extracting fields from a stream ID.  All of the macros
+** are used in a similar way:
+**
+**   CCSDS_SID_xxx(sid)          -- Extract field xxx from sid.
+**********************************************************************/
 
-/* Clear telemetry secondary header. */
-#if (CFE_SB_PACKET_TIME_FORMAT == CFE_SB_TIME_32_16_SUBS)
-  /* 32 bits seconds + 16 bits subseconds */
-  #define CCSDS_CLR_TLMSEC_HDR(shdr) \
-  ( (shdr).Time[0] = 0,\
-    (shdr).Time[1] = 0,\
-    (shdr).Time[2] = 0,\
-    (shdr).Time[3] = 0,\
-    (shdr).Time[4] = 0,\
-    (shdr).Time[5] = 0 )
+/* Extract application ID from stream ID. */
+#define CCSDS_SID_APID(sid)   CCSDS_RD_BITS(sid, 0x07FF, 0)
+
+/* Extract secondary header flag from stream ID. */
+#define CCSDS_SID_SHDR(sid)   CCSDS_RD_BITS(sid, 0x0800, 11)
+
+/* Extract packet type (0=TLM,1=CMD) from stream ID. */
+#define CCSDS_SID_TYPE(sid)   CCSDS_RD_BITS(sid, 0x1000, 12)
+
+/* Extract CCSDS version from stream ID. */
+#define CCSDS_SID_VERS(sid)   CCSDS_RD_BITS(sid, 0xE000, 13)
 
 
-#define CCSDS_WR_SEC_HDR_SUBSEC(shdr, value) shdr.Time[4] = ((value>>8)  & 0xFF),  \
-                                             shdr.Time[5] = ((value)     & 0xFF)
+/**********************************************************************
+** Macros for frequently used combinations of operations.
+**
+**   CCSDS_INC_SEQ(phdr)           -- Increment sequence count.
+**********************************************************************/
 
-#define CCSDS_RD_SEC_HDR_SUBSEC(shdr)        (((uint32_t)shdr.Time[4]) << 8)  | \
-                                             ((uint32_t)shdr.Time[5])
-#elif ((CFE_SB_PACKET_TIME_FORMAT == CFE_SB_TIME_32_32_SUBS) ||\
-       (CFE_SB_PACKET_TIME_FORMAT == CFE_SB_TIME_32_32_M_20))
-  /* 32 bits seconds + 32 bits subseconds */
-  #define CCSDS_CLR_TLMSEC_HDR(shdr) \
-  ( (shdr).Time[0] = 0,\
-    (shdr).Time[1] = 0,\
-    (shdr).Time[2] = 0,\
-    (shdr).Time[3] = 0,\
-    (shdr).Time[4] = 0,\
-    (shdr).Time[5] = 0,\
-    (shdr).Time[6] = 0,\
-    (shdr).Time[7] = 0 )
+/* Increment sequence count in primary header by 1. */
+#define CCSDS_INC_SEQ(phdr) \
+   CCSDS_WR_SEQ(phdr, CCSDS_RD_SEQ(phdr)+1)
 
-#define CCSDS_WR_SEC_HDR_SUBSEC(shdr, value) shdr.Time[4] = ((value>>24) & 0xFF),  \
-                                             shdr.Time[5] = ((value>>16) & 0xFF),  \
-                                             shdr.Time[6] = ((value>>8)  & 0xFF),  \
-                                             shdr.Time[7] = ((value)     & 0xFF)
+/*----- CCSDS packet primary header. -----*/
 
-#define CCSDS_RD_SEC_HDR_SUBSEC(shdr)        (((uint32)shdr.Time[4]) << 24) | \
-                                             (((uint32)shdr.Time[5]) << 16) | \
-                                             (((uint32)shdr.Time[6]) << 8)  | \
-                                             ((uint32)shdr.Time[7])
-#endif
+typedef struct {
 
+   uint8_t   StreamId[2];  /* packet identifier word (stream ID) */
+      /*  bits  shift   ------------ description ---------------- */
+      /* 0x07FF    0  : application ID                            */
+      /* 0x0800   11  : secondary header: 0 = absent, 1 = present */
+      /* 0x1000   12  : packet type:      0 = TLM, 1 = CMD        */
+      /* 0xE000   13  : CCSDS version, always set to 0            */
+
+   uint8_t   Sequence[2];  /* packet sequence word */
+      /*  bits  shift   ------------ description ---------------- */
+      /* 0x3FFF    0  : sequence count                            */
+      /* 0xC000   14  : segmentation flags:  3 = complete packet  */
+
+   uint8_t  Length[2];     /* packet length word */
+      /*  bits  shift   ------------ description ---------------- */
+      /* 0xFFFF    0  : (total packet length) - 7                 */
+
+} CCSDS_PriHdr_t;
+
+/*----- CCSDS command secondary header. -----*/
+
+typedef struct {
+
+   uint16_t  Command;      /* command secondary header */
+      /*  bits  shift   ------------ description ---------------- */
+      /* 0x00FF    0  : checksum, calculated by ground system     */
+      /* 0x7F00    8  : command function code                     */
+      /* 0x8000   15  : reserved, set to 0                        */
+
+} CCSDS_CmdSecHdr_t;
+
+/*----- CCSDS telemetry secondary header. -----*/
+
+typedef struct {
+
+   uint8_t  Time[CCSDS_TIME_SIZE];
+
+} CCSDS_TlmSecHdr_t;
+
+/*----- Generic combined command header. -----*/
+
+typedef struct {
+   CCSDS_PriHdr_t       PriHdr;
+   CCSDS_CmdSecHdr_t    SecHdr;
+} CCSDS_CmdPkt_t;
+
+union {
+    uint8_t hdrbytes[8];
+    CCSDS_CmdPkt_t PktHdr;
+} CmdHeader_u;
+
+typedef struct {
+   CCSDS_CmdPkt_t       Hdr;
+   uint8_t            Data;
+} CmdPkt_t;
+
+/*----- Generic combined telemetry header. -----*/
+
+typedef struct {
+   CCSDS_PriHdr_t       PriHdr;
+   CCSDS_TlmSecHdr_t    SecHdr;
+} CCSDS_TlmPkt_t;
+
+union {
+    uint8_t hdrbytes[8];
+    CCSDS_TlmPkt_t PktHdr;
+} TlmHeader_u;
+
+// Function prototypes
 bool CCSDS_ValidCheckSum (CCSDS_CmdPkt_t *PktPtr);
 
 uint8_t CCSDS_ComputeCheckSum (CCSDS_CmdPkt_t *PktPtr);

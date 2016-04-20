@@ -12,11 +12,13 @@
 uint16_t Transmitted_AP_IDs[NUM_TRANS_APIDS] = {1, 2, 0, 0, 0};
 
 const uint8_t SyncByte[2] = {0x18, 0x01};
+const uint8_t RespondSyncByte[2] = {0x18, 0x02};
 
 uint8_t Buff_9002XbeeBuf[PKT_MAX_LEN];
 int BytesRead900 = 0;
 uint8_t Buff_Xbee2900[PKT_MAX_LEN];
 int XbeeBytesRead = 0;
+uint32_t _SendCtr = 0;
 
 CCSDS_TlmSecHdr_t TlmHeader;
 CCSDS_CmdSecHdr_t CmdHeader;
@@ -28,11 +30,14 @@ uint16_t XBee_MY_Addr = 0x0002;
 // PAN ID of xbee (must match all xbees)
 uint16_t XBee_PAN_ID = 0x0B0B;
 
+uint8_t err_cnt = 0;
+
 int APID = 0;
 int PktLen = 0;
 int bytesRead = 0;
 int BytesinBuffer = 0;
 
+uint32_t tlmctrl = 0x04;//67108864;
 
 void setup() {
   // debug
@@ -101,18 +106,18 @@ void loop() {
   
   //Serial.print("Xbee read status: ");
   //Serial.println(XbeeBytesRead);
-  Serial.println();
   // If data proccess and send 
   if (XbeeBytesRead > 0) {
+  Serial.println();
 
-      //PriHeader = *(CCSDS_PriHdr_t*) (Buff_Xbee2900);
-      //CmdHeader = *(CCSDS_CmdSecHdr_t*) (Buff_Xbee2900+sizeof(CCSDS_PriHdr_t));
-      //TlmHeader = *(CCSDS_TlmSecHdr_t*) (Buff_Xbee2900+sizeof(CCSDS_PriHdr_t));
+      PriHeader = *(CCSDS_PriHdr_t*) (Buff_Xbee2900);
+      CmdHeader = *(CCSDS_CmdSecHdr_t*) (Buff_Xbee2900+sizeof(CCSDS_PriHdr_t));
+      TlmHeader = *(CCSDS_TlmSecHdr_t*) (Buff_Xbee2900+sizeof(CCSDS_PriHdr_t));
 
       // Convert inital bytes of packet into header structure
-      memcpy(&PriHeader, Buff_Xbee2900, sizeof(CCSDS_PriHdr_t));
-      memcpy(&CmdHeader, Buff_Xbee2900+6, sizeof(CCSDS_CmdSecHdr_t));
-      memcpy(&TlmHeader, Buff_Xbee2900+6, sizeof(CCSDS_TlmSecHdr_t));
+      //memcpy(&PriHeader, Buff_Xbee2900, sizeof(CCSDS_PriHdr_t));
+      //memcpy(&CmdHeader, Buff_Xbee2900+6, sizeof(CCSDS_CmdSecHdr_t));
+      //memcpy(&TlmHeader, Buff_Xbee2900+6, sizeof(CCSDS_TlmSecHdr_t));
     
       Serial.println("Xbee -> Serial: ");
       printPktInfo(PriHeader, CmdHeader, TlmHeader);
@@ -135,10 +140,17 @@ void loop() {
           }
        
   } 
-  //else{
-  //  Serial.print("Failed to read pkt with error code ");
-  //  Serial.println(XbeeBytesRead);
-  //}
+  else if(XbeeBytesRead > -4) {
+    Serial.print("Failed to read pkt with error code ");
+    Serial.println(XbeeBytesRead);
+    if(err_cnt > 3){
+      Serial3.flush();
+      delay(3);
+      err_cnt = 0;
+      Serial.println("Flushing buffer");
+    }
+    err_cnt++;
+  }
 
   /////// 900s to xbee
 
@@ -150,6 +162,11 @@ void loop() {
   
   // updating counter
   BytesinBuffer += BytesRead900;
+
+  if(BytesRead900 > 0){
+          Serial.print("REad :");
+      Serial.println(BytesRead900);
+  }
   
   //Serial.print(", BytesinBuf: ");
   //Serial.println(BytesinBuffer);
@@ -206,7 +223,89 @@ void loop() {
       }
      break;
     }     
+    if(Buff_9002XbeeBuf[i] == RespondSyncByte[0] & Buff_9002XbeeBuf[i+1] == RespondSyncByte[1]) {
+
+
+
+      PriHeader = *(CCSDS_PriHdr_t*) (Buff_9002XbeeBuf+i);
+      CmdHeader = *(CCSDS_CmdSecHdr_t*) (Buff_9002XbeeBuf+i+sizeof(CCSDS_PriHdr_t));
+      TlmHeader = *(CCSDS_TlmSecHdr_t*) (Buff_9002XbeeBuf+i+sizeof(CCSDS_PriHdr_t));
+      
+      // Convert inital bytes of packet into header structure
+      //memcpy(&PriHeader, Buff_9002XbeeBuf, sizeof(CCSDS_PriHdr_t));
+      //memcpy(&CmdHeader, Buff_9002XbeeBuf+6, sizeof(CCSDS_CmdSecHdr_t));
+      //memcpy(&TlmHeader, Buff_9002XbeeBuf+6, sizeof(CCSDS_TlmSecHdr_t));
+
+      // display debugging info
+      Serial.println("Serial -> Respond: ");
+      printPktInfo(PriHeader, CmdHeader, TlmHeader);
+          
+      // Get the total length of packet
+      int PacketLength = CCSDS_RD_LEN(PriHeader);
+      // Extract address 
+
+      Serial.print("Recvd pktlen: ");
+      Serial.println(PacketLength);
+      
+      // If you have a whole packet send it
+      if(BytesinBuffer >= PacketLength+i){
+
+
+        uint8_t _packet_data[PKT_MAX_LEN];
+        uint8_t _payload_size = 0;
+        
+        // declare the header structures
+        CCSDS_PriHdr_t _PriHeader;
+        CCSDS_TlmSecHdr_t _TlmSecHeader;
+
+        _payload_size = 8+sizeof(_PriHeader)+sizeof(_TlmSecHeader);
+      
+        // fill primary header fields
+        CCSDS_WR_APID(_PriHeader,0x03);
+        CCSDS_WR_SHDR(_PriHeader,1);
+        CCSDS_WR_TYPE(_PriHeader,0);
+        CCSDS_WR_VERS(_PriHeader,0);
+        CCSDS_WR_SEQ(_PriHeader,_SendCtr);
+        CCSDS_WR_SEQFLG(_PriHeader,0x03);
+        CCSDS_WR_LEN(_PriHeader,8+sizeof(_PriHeader)+sizeof(_TlmSecHeader));
+
+                // fill secondary header fields
+        CCSDS_WR_SEC_HDR_SEC(_TlmSecHeader,millis()/1000L);
+        CCSDS_WR_SEC_HDR_SUBSEC(_TlmSecHeader,millis() % 1000L);
+
+        // copy the primary header
+          memcpy(_packet_data, &_PriHeader, sizeof(_PriHeader));
+        
+          // copy the secondary header
+          memcpy(_packet_data+sizeof(_PriHeader), &_TlmSecHeader, sizeof(_TlmSecHeader));
+        
+          // copy the packet data
+          memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), &tlmctrl, 4);
+          memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader)+4, &_SendCtr, 4);
+
+        Serial.print("Sending  ");
+        Serial.print(_payload_size);
+        Serial.println(" bytes: ");
+        _SendCtr++;
+        for(int ii=0; ii < _payload_size; ii++){
+          Serial.print( _packet_data[ii]);
+          Serial2.write( _packet_data[ii]);
+          Serial.print( ", ");
+        }
+        Serial.println();
+        
+        // updating counter
+        BytesinBuffer -= PacketLength;
+        Serial.print(", BytesinBuf: ");
+        Serial.println(BytesinBuffer);
+        break;
+
+      }
+    }
+    Serial.print(", BytesinBuf: ");
+        Serial.println(BytesinBuffer);
   }
-  delay(1000);
+  
+  delay(10);
 
 }

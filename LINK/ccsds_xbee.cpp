@@ -448,7 +448,7 @@ its effect on the rest of the program.
     in the initalization
     */
     //Serial.println("No packet available");    
-    return -1;
+    return -5;
   } 
 }
 
