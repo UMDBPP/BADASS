@@ -193,9 +193,18 @@ function timerCallback(src, event, serConn, logfile)
         % define the length of an xbee header
         xbee_hdr_len = 6;
 
+        % look for link responses
+        link_respond = strfind(UserData.ByteBuffer, [hex2dec('08') hex2dec('03')]);
+%         if(~isempty(link_respond))
+%             fprintf('Found link response! \n');
+%             UserData.ByteBuffer = UserData.ByteBuffer(link_respond(1)+20:end); 
+%         end
+        
         % look for header bytes
         pkt_loc = strfind(UserData.ByteBuffer, [hex2dec('08') hex2dec('02')]);
-            
+        
+        pkt_loc = [pkt_loc link_respond];
+        
         % if a packet was found
         if(~isempty(pkt_loc))
             
@@ -211,7 +220,7 @@ function timerCallback(src, event, serConn, logfile)
                 % extract the packet length
                 [~, ~, ~, ~, ~, ~, PktLen] = ExtractPriHdr(pkthdr, Endian.Little);
  
-                total_pktlen = PktLen+7;
+                total_pktlen = PktLen+7-1;
    
                 % if we've received the entire packet, process it
                 if(pkt_loc+total_pktlen < length(UserData.ByteBuffer))
@@ -249,10 +258,11 @@ function timerCallback(src, event, serConn, logfile)
         end
     end
     
-    
     set(src, 'UserData',UserData);
     assignin('base','ByteBuffer',UserData.ByteBuffer);
+    
     catch ME
+        fprintf('\n');
         disp(getReport(ME));
         
     end

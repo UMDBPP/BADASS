@@ -38,27 +38,31 @@ function arr = sendCmd(APID,FcnCode,varargin)
 	CMD_SetElPolarity = hex2dec('0A');
     CMD_SetMode = hex2dec('0B');
 
-    uint32_arg = [CMD_RequestTlmPt];
+    uint32_arg = [CMD_SetTlmCtrl CMD_RequestTlmPt];
     uint16_arg = [CMD_SetCycTime];
-    uint8_arg = [CMD_SetServoEnable CMD_SetRWEnable CMD_SetElPolarity CMD_SetTlmAddr CMD_SetMode];
+    uint8_arg = [CMD_SetServoEnable CMD_SetRWEnable CMD_SetElPolarity CMD_SetTlmAddr];
     no_arg = [CMD_SendTestPkt];
     three_float_args = [CMD_SetTargetNED];
     four_float_args = [CMD_SetIMU2BODY];
-     
+    tlm_ctrl = [CMD_SetTlmCtrl CMD_RequestTlmPt];
+    uint8_float_arg = [CMD_SetMode];
     
     % tlmctrl arg
-    if(ismember(FcnCode,CMD_SetTlmCtrl))
-        if(nargin ~= 3)
-           error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
-        end
-        tlmctrl_val = 0;
-        arg = varargin{1};
-        for i=1:length(arg)
-            tlmctrl_val = tlmctrl_val + 2^arg(i);
-        end
-        arr(12:-1:9) = typecast(uint32(tlmctrl_val),'uint8');
-        arr(13) = uint8(0);
-    end
+%     if(ismember(FcnCode,tlm_ctrl))
+%         if(nargin ~= 3)
+%            error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
+%         end
+%         tlmctrl_val = 0;
+%         arg = varargin{1};
+%         for i=1:length(arg)
+%             tlmctrl_val = tlmctrl_val + 2^arg(i);
+%         end
+%         tlmctrl_val
+%         arr(12:-1:9) = typecast(uint32(tlmctrl_val),'uint8')
+%         arr(13) = uint8(0);
+%     end
+%     
+%     return
     % 1 uint32 argument
     if(ismember(FcnCode,uint32_arg))
         if(nargin ~= 3)
@@ -87,13 +91,22 @@ function arr = sendCmd(APID,FcnCode,varargin)
            error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
         end
     end
+    if(ismember(FcnCode,uint8_float_arg))
+        if(nargin ~= 4)
+           error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
+        end
+        arr(9) = typecast(uint8(varargin{1}),'uint8');
+        arr(10:13) = typecast(uint8(varargin{2}),'uint32');
+    end
+    
+    
     
     % update the length of the packet
     arr(5:6) = typecast(swapbytes(uint16(length(arr)-7)),'uint8');
     
     % update the packet checksum
     arr(7) = calcChecksum(arr);
-    
+        
     % write the packet
     fwrite(serConn,arr);
 

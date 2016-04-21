@@ -11,7 +11,7 @@ function CheckSum = calcChecksum(arr)
     CheckSum = uint8(hex2dec('FF'));
     
     % loop through elements and calculate checksum
-    for i=length(arr):-1:1  
+    for i=1:length(arr)
         CheckSum = bitxor(CheckSum,arr(i));
     end
 

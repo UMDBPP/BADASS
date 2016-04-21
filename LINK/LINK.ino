@@ -5,8 +5,8 @@
 #include "CCSDS_xbee.h"
 
 #define PKT_MAX_LEN 200
-
 #define NUM_TRANS_APIDS 5
+#define TLMMask_LINKSendCtr   0x02000000  // 2^26
 
 // List of AP_ID for forwarding data to ground
 uint16_t Transmitted_AP_IDs[NUM_TRANS_APIDS] = {1, 2, 0, 0, 0};
@@ -37,7 +37,7 @@ int PktLen = 0;
 int bytesRead = 0;
 int BytesinBuffer = 0;
 
-uint32_t tlmctrl = 0x04;//67108864;
+uint32_t tlmctrl = 0xFFFFFFFF & TLMMask_LINKSendCtr;
 
 void setup() {
   // debug
@@ -252,13 +252,11 @@ void loop() {
 
 
         uint8_t _packet_data[PKT_MAX_LEN];
-        uint8_t _payload_size = 0;
+        uint8_t payload_size = 0;
         
         // declare the header structures
         CCSDS_PriHdr_t _PriHeader;
-        CCSDS_TlmSecHdr_t _TlmSecHeader;
-
-        _payload_size = 8+sizeof(_PriHeader)+sizeof(_TlmSecHeader);
+        CCSDS_TlmSecHdr_t _TlmSecHeader;       
       
         // fill primary header fields
         CCSDS_WR_APID(_PriHeader,0x03);
@@ -272,23 +270,29 @@ void loop() {
                 // fill secondary header fields
         CCSDS_WR_SEC_HDR_SEC(_TlmSecHeader,millis()/1000L);
         CCSDS_WR_SEC_HDR_SUBSEC(_TlmSecHeader,millis() % 1000L);
-
+        
         // copy the primary header
           memcpy(_packet_data, &_PriHeader, sizeof(_PriHeader));
-        
+          payload_size += sizeof(_PriHeader);
+                
           // copy the secondary header
           memcpy(_packet_data+sizeof(_PriHeader), &_TlmSecHeader, sizeof(_TlmSecHeader));
-        
+          payload_size += sizeof(_TlmSecHeader);
+                
           // copy the packet data
-          memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), &tlmctrl, 4);
-          memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader)+4, &_SendCtr, 4);
+          payload_size = addIntToTlm(tlmctrl,_packet_data,payload_size);
+          payload_size = addIntToTlm(_SendCtr,_packet_data,payload_size);
+
+          
+          //memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), &tlmctrl, 4);
+          //memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader)+4, &_SendCtr, 4);
 
         Serial.print("Sending  ");
-        Serial.print(_payload_size);
+        Serial.print(payload_size);
         Serial.println(" bytes: ");
         _SendCtr++;
-        for(int ii=0; ii < _payload_size; ii++){
-          Serial.print( _packet_data[ii]);
+        for(int ii=0; ii < payload_size; ii++){
+          Serial.print( _packet_data[ii],HEX);
           Serial2.write( _packet_data[ii]);
           Serial.print( ", ");
         }
