@@ -116,7 +116,6 @@ function msg = parseMsg(byte_arr, endianness)
 	TLMMask_CycleTime =   	hex2dec('00000400'); % 2^10
 	TLMMask_CmdRcvd =   	hex2dec('00000800'); % 2^11
 	TLMMask_DesiredCycTime = hex2dec('00001000'); % 2^12
-	TLMMask_CmdEcho =   	hex2dec('00001000'); % 2^13
 	TLMMask_Temp1 =         hex2dec('00002000'); % 2^14
 	TLMMask_Temp2 =         hex2dec('00004000'); % 2^15
 	TLMMask_TempBME =   	hex2dec('00008000'); % 2^16
@@ -129,7 +128,8 @@ function msg = parseMsg(byte_arr, endianness)
     TLMMask_MsgSent =       hex2dec('00400000'); % 2^23
     TLMMask_MsgRcvd =       hex2dec('00800000'); % 2^24
     TLMMask_Mode  =         hex2dec('01000000'); % 2^25
-    
+    TLMMask_LINKCtr  =      hex2dec('02000000'); % 2^26
+
     % // commanding
     set_tlmctrl_CMD = hex2dec('01');
     set_cyctime_CMD = hex2dec('02');
@@ -166,12 +166,15 @@ function msg = parseMsg(byte_arr, endianness)
     
     % extrac cal values
     if(bitand(tlmctrl,TLMMask_BNOCal))
-        tmp = pktdata(data_idx:data_idx+3);
+        [uint8_val(1), data_idx] = extractUint8(pktdata,data_idx,endianness);
+        [uint8_val(2), data_idx] = extractUint8(pktdata,data_idx,endianness);
+        [uint8_val(3), data_idx] = extractUint8(pktdata,data_idx,endianness);
+        [uint8_val(4), data_idx] = extractUint8(pktdata,data_idx,endianness);
+
         TLM.bno_cal = addsample(TLM.bno_cal, ...
-            'Data', tmp, 'Time', Time);
-        data_idx = data_idx + 4;
+            'Data', uint8_val, 'Time', Time);
         
-        fprintf('BNOCal: [%d %d %d %d], ',tmp);
+        fprintf('BNOCal: [%d %d %d %d], ',uint8_val);
     end
     
     % extract euler angles
@@ -225,67 +228,57 @@ function msg = parseMsg(byte_arr, endianness)
         TLM.azel_err = addsample(TLM.azel_err, ...
             'Data', vec_tmp, 'Time', Time);
         
-        fprintf('AzElErr: [%0.2f %0.2f], ',vec_tmp);
+        fprintf('AzElErr: [%0.2f %0.2f], ',vec_tmp*180/pi);
 
     end
     
     % extract el_cmd
     if(bitand(tlmctrl,TLMMask_ElCmd))
-        TLM.el_cmd = addsample(TLM.el_cmd, ...
-            'Data', pktdata(data_idx), 'Time', Time);
         
-        fprintf('ElCmd: %d, ',pktdata(data_idx));
-                
-        data_idx = data_idx + 1;
+        [int16_tmp, data_idx] = extractInt16(pktdata,data_idx,endianness);
+        
+        TLM.el_cmd = addsample(TLM.el_cmd, ...
+            'Data',int16_tmp, 'Time', Time);
+        
+        fprintf('ElCmd: %d, ',int16_tmp);
         
     end
     
     % extract cycle_time
     if(bitand(tlmctrl,TLMMask_CycleTime))
-        if(endianness ~= Endian.Little)
-            tmp = typecast(pktdata(data_idx+1:-1:data_idx),'uint16');
-        else
-            tmp = typecast(pktdata(data_idx:data_idx+1),'uint16');
-        end
+        [uint16_val, data_idx] = extractUint16(pktdata,data_idx,endianness);
+
         TLM.cycle_time = addsample(TLM.cycle_time, ...
-            'Data', tmp, 'Time', Time);
-        data_idx = data_idx + 2;
+            'Data', uint16_val, 'Time', Time);
         
-        fprintf('CycTime: %d, ',tmp);
+        fprintf('CycTime: %d, ',uint16_val);
     end
     
     % extract cmd_rcvd
     if(bitand(tlmctrl,TLMMask_CmdRcvd))
+        [uint8_val, data_idx] = extractUint8(pktdata,data_idx,endianness);
+        
         TLM.cmd_rcvd = addsample(TLM.cmd_rcvd, ...
-            'Data', pktdata(data_idx), 'Time', Time);
+            'Data', uint8_val, 'Time', Time);
         
-        fprintf('CmdRcvd: %d, ',pktdata(data_idx));
-        
-        data_idx = data_idx + 1;
-        
+        fprintf('CmdRcvd: %d, ',uint8_val);
+                
     end
     
     % extract desired_cyc_time
     if(bitand(tlmctrl,TLMMask_DesiredCycTime))
+        [uint16_val, data_idx] = extractUint16(pktdata,data_idx,endianness);
+        
         TLM.desired_cyc_time = addsample(TLM.desired_cyc_time, ...
-            'Data', pktdata(data_idx), 'Time', Time);
+            'Data', uint16_val, 'Time', Time);
         
-        fprintf('DesiredCmdRcvd: %d, ',pktdata(data_idx));
-        data_idx = data_idx + 1;
-    end
-    
-    % extract fcncode
-    if(bitand(tlmctrl,TLMMask_CmdEcho))
-        TLM.cmdecho = addsample(TLM.cmdecho, ...
-            'Data', pktdata(data_idx), 'Time', Time);
-        
-        fprintf('FcnCode: %0.2f, ',pktdata(data_idx));
-        data_idx = data_idx + 1;
+        fprintf('DesiredCmdRcvd: %d, ',uint16_val);
     end
     
     % extract temp1
     if(bitand(tlmctrl,TLMMask_Temp1))
         [float_val, data_idx] = extractFloat(pktdata,data_idx,endianness);
+        
         TLM.temp1 = addsample(TLM.temp1, ...
             'Data', float_val, 'Time', Time);
         
@@ -296,6 +289,7 @@ function msg = parseMsg(byte_arr, endianness)
     % extract temp2
     if(bitand(tlmctrl,TLMMask_Temp2))
         [float_val, data_idx] = extractFloat(pktdata,data_idx,endianness);
+        
         TLM.temp2 = addsample(TLM.temp2, ...
             'Data', float_val, 'Time', Time);
         
@@ -338,59 +332,84 @@ function msg = parseMsg(byte_arr, endianness)
     
     % extract current
     if(bitand(tlmctrl,TlmMask_Current))
-        TLM.current = addsample(TLM.current, ...
-            'Data', typecast(pktdata(data_idx:data_idx+1),'uint16'), 'Time', Time);
+        [int16_val, data_idx] = extractInt16(pktdata,data_idx,endianness);
         
-        fprintf('Current: %d, ',typecast(pktdata(data_idx:data_idx+1),'uint16'));
+        TLM.current = addsample(TLM.current, ...
+            'Data', int16_val, 'Time', Time);
+%         'Data', uint16_val*0.03, 'Time', Time);
+        fprintf('Current: %d, ',int16_val);
 
-        data_idx = data_idx + 2;
     end
     
     % extract volt
     if(bitand(tlmctrl,TLMMask_Volt))
-        TLM.voltage = addsample(TLM.voltage, ...
-            'Data', typecast(pktdata(data_idx:data_idx+1),'uint16'), 'Time', Time);
         
-        fprintf('Volt: %d, ',typecast(pktdata(data_idx:data_idx+1),'uint16'));
+        [int16_val, data_idx] = extractInt16(pktdata,data_idx,endianness);
 
-        data_idx = data_idx + 2;
+        TLM.voltage = addsample(TLM.voltage, ...
+            'Data', int16_val, 'Time', Time);
+        %             'Data', int16_val*0.00298535/0.3267, 'Time', Time);
+        
+        fprintf('Volt: %d, ',int16_val);
+
     end
 
     % extract initstat
     if(bitand(tlmctrl,TLMMask_InitStat))
-        TLM.initstat = addsample(TLM.initstat, ...
-            'Data', typecast(pktdata(data_idx:data_idx+1),'uint16'), 'Time', Time);
         
-        fprintf('InitStat: %d, ',typecast(pktdata(data_idx:data_idx+1),'uint16'));
-        data_idx = data_idx + 2;
+        [uint16_val, data_idx] = extractUint16(pktdata,data_idx,endianness);
+        
+        TLM.initstat = addsample(TLM.initstat, ...
+            'Data', uint16_val, 'Time', Time);
+        
+        fprintf('InitStat: %d, ',uint16_val);
     end
     
     % extract msgsent
     if(bitand(tlmctrl,TLMMask_MsgSent))
+        
+        [uint32_val, data_idx] = extractUint32(pktdata,data_idx,endianness);
+        
         TLM.msgsent = addsample(TLM.msgsent, ...
-            'Data', typecast(pktdata(data_idx:data_idx+3),'uint32'), 'Time', Time);
-        fprintf('MsgSentCtr: %d, ',typecast(pktdata(data_idx:data_idx+3),'uint16'));
+            'Data', uint32_val, 'Time', Time);
+        
+        fprintf('MsgSentCtr: %d, ',uint32_val);
 
-        data_idx = data_idx + 4;
     end
     
     % extract msgrcvd
     if(bitand(tlmctrl,TLMMask_MsgRcvd))
+        
+        [uint32_val, data_idx] = extractUint32(pktdata,data_idx,endianness);
+
         TLM.msgrcvd = addsample(TLM.msgrcvd, ...
-            'Data', typecast(pktdata(data_idx:data_idx+3),'uint32'), 'Time', Time);
-        fprintf('MsgRcvdCtr: %d, ',typecast(pktdata(data_idx:data_idx+3),'uint16'));
-        data_idx = data_idx + 4;
+            'Data', uint32_val, 'Time', Time);
+        
+        fprintf('MsgRcvdCtr: %d, ',uint32_val);
+
     end
     
     % extract mode
     if(bitand(tlmctrl,TLMMask_Mode))
+        
+        [uint16_val, data_idx] = extractUint16(pktdata,data_idx,endianness);
+        
         TLM.mode = addsample(TLM.mode, ...
-            'Data', typecast(pktdata(data_idx),'single'), 'Time', Time);
-        fprintf('Mode: %d, ',typecast(pktdata(data_idx),'uint16'));
+            'Data', uint16_val, 'Time', Time);
+        fprintf('Mode: %d, ',uint16_val);
 
-        data_idx = data_idx + 1;
     end
+    
+    % extract mode
+    if(bitand(tlmctrl,TLMMask_LINKCtr))
+        
+        [uint32_val, data_idx] = extractUint32(pktdata,data_idx,endianness);
+        
+        TLM.LINKCtr = addsample(TLM.LINKCtr, ...
+            'Data', uint32_val, 'Time', Time);
+        fprintf('LINKCtr: %d, ',uint32_val);
 
+    end
     fprintf('\n');
     
     % put the data back into the base workspace

@@ -1,5 +1,4 @@
-/* 
-this file contains several functions used in the main code
+/* this file contains several functions used in the main code
 which were moved to a separate file solely to reduce clutter
 in this code (which is the only code which should need to be
 modified.

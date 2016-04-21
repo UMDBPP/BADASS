@@ -12,9 +12,15 @@ function plotTLM(var_str)
     hdl = figure('Name',sprintf('%s liveplot',var_str));
     
     % plot the data, linking the plot to the data in the base workspace
-    plot(TLM_DB.(var_str),'XDataSource',sprintf('TLM.%s.time',var_str),'YDataSource',sprintf('TLM.%s.data',var_str));
+    h = plot(TLM_DB.(var_str),'XDataSource',sprintf('TLM.%s.time',var_str),'YDataSource',sprintf('TLM.%s.data',var_str));
+    
+    % plot with dates on x axis
+    datetick('x', 'HH:MM');
+
+    % add grid
+    grid on
     
     % turn on the linking
     linkdata(hdl)
-
+set(gca,'XTickMode','auto')
 end

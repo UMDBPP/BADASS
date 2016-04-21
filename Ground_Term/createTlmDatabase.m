@@ -33,17 +33,18 @@ TLM.cycle_time = timeseries('Cycle Time [ms]');
 TLM.cmd_rcvd = timeseries('Command Received');
 TLM.desired_cyc_time = timeseries('Desired Cycle Time [ms]');
 TLM.cmdecho = timeseries('Cmd Echo');
-TLM.temp1 = timeseries('Temp1');
-TLM.temp2 = timeseries('Temp2');
-TLM.tempbme = timeseries('Temp BME');
+TLM.temp1 = timeseries('Temp1 [C]');
+TLM.temp2 = timeseries('Temp2 [C]');
+TLM.tempbme = timeseries('Temp BME [C]');
 TLM.pres = timeseries('Pressure');
-TLM.alt = timeseries('Altitude');
-TLM.humid = timeseries('Humidity');
-TLM.current = timeseries('Current');
-TLM.voltage = timeseries('Voltage');
+TLM.alt = timeseries('Altitude [m]');
+TLM.humid = timeseries('Humidity [%]');
+TLM.current = timeseries('Current [A]');
+TLM.voltage = timeseries('Voltage [V]');
 TLM.initstat = timeseries('InitStatus');
 TLM.msgsent = timeseries('MsgSent');
 TLM.msgrcvd = timeseries('MsgRcvd');
 TLM.mode = timeseries('Mode');
+TLM.LINKCtr = timeseries('LINKCtr');
 
 end

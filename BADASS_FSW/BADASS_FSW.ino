@@ -20,6 +20,7 @@
 // include communication libraries
 #include <XBee.h>
 #include "CCSDS_xbee.h"
+#include "BADASS_Interface.h"
 
 extern uint32_t _SendCtr;
 extern uint32_t _RcvdCtr;
@@ -58,71 +59,28 @@ Adafruit_BME280 bme;
 // declare the ADC
 Adafruit_ADS1015 ads(0x4A);
 
-////// Telemetry 
-// these values define positions in a bitfield which control wether or 
-//  not the telemetry point will be output in the nominal telemetry packet
-#define TLMMask_TlmCtrl       0x00000001  // 2^0
-#define TLMMask_TargetNED     0x00000002  // 2^1
-#define TLMMask_BNOCal        0x00000004  // 2^2
-#define TLMMask_EulerAng      0x00000008  // 2^3
-#define TLMMask_q_imu2body    0x00000010  // 2^4
-#define TLMMask_q_ned2imu     0x00000020  // 2^5
-#define TLMMask_q_ned2body    0x00000040  // 2^6
-#define TLMMask_v_targetbody  0x00000080  // 2^7
-#define TLMMask_AzElErr       0x00000100  // 2^8
-#define TLMMask_ElCmd         0x00000200  // 2^9
-#define TLMMask_CycleTime     0x00000400  // 2^10
-#define TLMMask_CmdRcvd       0x00000800  // 2^11
-#define TLMMask_DesiredCycTime  0x00001000  // 2^12
-#define TLMMask_CmdEcho       0x00001000  // 2^13
-#define TLMMask_Temp1           0x00002000  // 2^14
-#define TLMMask_Temp2         0x00004000  // 2^15
-#define TLMMask_TempBME       0x00008000  // 2^16
-#define TLMMask_Pres          0x00010000  // 2^17
-#define TLMMask_PresAlt       0x00020000  // 2^18
-#define TLMMask_Humid         0x00040000  // 2^19
-#define TlmMask_Current       0x00080000  // 2^20
-#define TLMMask_Volt          0x00100000  // 2^21
-#define TLMMask_InitStat      0x00200000  // 2^22
-#define TLMMask_MsgSent         0x00400000  // 2^23
-#define TLMMask_MsgRcvd         0x00800000  // 2^24
-#define TLMMask_Mode          0x01000000  // 2^25
-
 // this bitfield, and the masks above, define which values get output in
 //  telemetry 
 
+// define common telemetry combinations
 #define TLM_HK 16761861 // [
 #define TLM_ATT 901
 #define TLM_INT 62927874
 
-uint32_t tlmctrl = TLM_HK;
+uint32_t tlmctrl = 2;
 //uint32_t tlmctrl = 0b0001000000000111;
 
-////// Commanding 
-// these values define the fcncode corresponding to each command
-// 0x01 doesnt work
-#define CMD_SetTlmCtrl     	0x01
-#define CMD_SetCycTime     	0x02
-#define CMD_SetTargetNED 	0x03
-#define CMD_SetIMU2BODY 	0x04
-#define CMD_SetServoEnable  0x05
-#define CMD_SetRWEnable 	0x06 // Not yet implemented
-#define CMD_RequestTlmPt	0x07
-#define CMD_SendTestPkt 	0x08
-#define CMD_SetTlmAddr 		0x09
-#define CMD_SetElPolarity 	0x0A
-#define CMD_SetMode 		0x0B
 
 ////// Sensors 
 // defines bits in initstatus for sensor status
-#define BNO_MASK        0x0001
-#define ADS_MASK 		0x0002
-#define MCP9808_1_MASK 	0x0004
-#define MCP9808_2_MASK 	0x0008
-#define bme_MASK 		0x0010
-#define SD_MASK 	    0x0020
-#define xbee_MASK		0x0040
-#define servo_MASK 		0x0080
+#define INITMASK_BNO    	0x0001
+#define INITMASK_ADS 		0x0002
+#define INITMASK_MCP9808_1 	0x0004
+#define INITMASK_MCP9808_2 	0x0008
+#define INITMASK_BME 		0x0010
+#define INITMASK_SD 	    0x0020
+#define INITMASK_xbee		0x0040
+#define INITMASK_servo 		0x0080
 
 ////// Modes
 #define MODE_Manual 	0x00
@@ -136,10 +94,13 @@ uint32_t tlmctrl = TLM_HK;
 //    commands during execution
 
 // execution rate of the program
-uint16_t desiredcycletime = 2000; // [ms]
+uint16_t desiredctrltime = 100; // [ms]
+uint16_t desiredIMUlogtime = 100; // [ms]
+uint16_t desiredHKlogtime = 100; // [ms]
+uint16_t desiredcommtime = 1000; // [ms]
 
 // command the servo
-bool ServoEnableFlg = true;
+bool ServoEnableFlg = false;
 bool El_Cmd_Polarity = true;
 
 uint8_t op_mode = MODE_Auto;
@@ -156,27 +117,54 @@ imu::Vector<3> y_axis = imu::Vector<3>( 0.0, 1.0, 0.0);
 imu::Vector<3> z_axis = imu::Vector<3>( 0.0, 0.0, 1.0);
 
 // xbee address to sent telemetry to
-uint8_t tlm_addr = 2;
+uint8_t tlm_addr = 0x02;
+
+// actuator stops
+float max_el_ang = 170;
+float min_el_ang = 10;
+
+// manual mode command angles
+float man_el_ang = 0.0;
 
 // Program Memory
 // These values are calculated/generated during the exectuion of
 //  the program
-int cycle_start_time = 0;
-int servo_cmd = 0;
+
+// timing
+int ctrl_cycle_start = 0;
+int HKlog_cycle_start = 0;
+int IMUlog_cycle_start = 0;
+int comm_cycle_start = 0;
+
+int ctrl_cycle_time;
+int HKlog_cycle_time;
+int IMUlog_cycle_time;
+int comm_cycle_time;
+
+// data buffers
 uint8_t incomingByte[100];
-int bytesread = 0;
-uint8_t tlm_len = 0;
 uint8_t telemetry_data[200];
+
+uint8_t tlm_len = 0;
 uint16_t tlm_seq_cnt = 0;
 int pkt_type = 0;
 uint16_t cmdrcvdcnt = 0;
-uint16_t tlmsentcnt = 0;
+uint8_t fcncode = 0;
+int APID = 0;
+int PktType = 0;
+int bytesread = 0;
 
+int16_t servo_cmd = 0;
+
+// hk values
+float temp1 = 0;
+float temp2 = 0;
 float tempbme = 0.0;
 float pres = 0.0;
 float alt = 0.0;
 float humid = 0.0;
 uint16_t raw_current, raw_voltage;
+
 uint16_t initstatus = 0;
 
 // make it long enough to hold your longest file name, plus a null terminator
@@ -190,15 +178,6 @@ uint8_t sys_stat = 0, st_res = 0, sys_err = 0;
 int i = 0;
 float pterr_az = 0.0, pterr_el = 0.0;
 float cmd_az_ang = 0.0, cmd_el_ang = 0.0;
-float man_el_ang = 0.0;
-int cycle_time;
-
-uint8_t fcncode = 0;
-int APID = 0;
-int PktType = 0;
-
-float temp1 = 0;
-float temp2 = 0;
 
 sensors_event_t event; 
 
@@ -260,507 +239,6 @@ imu::Vector<3> normtoplane(imu::Vector<3> NormVec, imu::Vector<3> Tgt) {
   
 }
     
-uint8_t compileTLM(uint32_t tlmctrl){
-// compiles the requested telemetry into a bytearray
-
-	// initalize position in array
-	uint8_t tlm_pos = 0;
-	
-	// telemetry compilation
-	if(tlmctrl & TLMMask_TlmCtrl){
-		tlm_pos = addIntToTlm(tlmctrl, telemetry_data, tlm_pos);
-
-		Serial.print(" tlmctrl: ");
-		Serial.print(tlmctrl);
-
-	}
-
-	logFile.print(tlmctrl);
-	logFile.print(", ");
-	  
-	if(tlmctrl & TLMMask_TargetNED){
-		tlm_pos = addFloatToTlm( target_ned(0), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( target_ned(1), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( target_ned(2), telemetry_data, tlm_pos);
-
-		Serial.print(" target_ned: ");
-		Serial.print(target_ned(0), 4);
-		Serial.print(" ");
-		Serial.print(target_ned(1), 4);
-		Serial.print(" ");
-		Serial.print(target_ned(2), 4);
-	}
-
-	logFile.print(target_ned(0), 4);
-	logFile.print(", ");
-	logFile.print(target_ned(1), 4);
-	logFile.print(", ");
-	logFile.print(target_ned(2), 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_BNOCal){
-		tlm_pos = addIntToTlm(sys_cal, telemetry_data, tlm_pos);
-		tlm_pos = addIntToTlm(gyro_cal, telemetry_data, tlm_pos);
-		tlm_pos = addIntToTlm(accel_cal, telemetry_data, tlm_pos);
-		tlm_pos = addIntToTlm(mag_cal, telemetry_data, tlm_pos);
-
-		Serial.print(" Cal: ");
-		Serial.print(sys_cal);
-		Serial.print(" ");
-		Serial.print(gyro_cal);
-		Serial.print(" ");
-		Serial.print(accel_cal);
-		Serial.print(" ");
-		Serial.print(mag_cal);
-
-	}
-
-	logFile.print(sys_cal);
-	logFile.print(", ");
-	logFile.print(gyro_cal);
-	logFile.print(", ");
-	logFile.print(accel_cal);
-	logFile.print(", ");
-	logFile.print(mag_cal);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_EulerAng){
-		tlm_pos = addFloatToTlm( euler.x(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( euler.y(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( euler.z(), telemetry_data, tlm_pos);
-
-		Serial.print(" euler ang: ");
-		Serial.print("[");
-		Serial.print(euler.x(), 4);
-		Serial.print("; ");
-		Serial.print(euler.y(), 4);
-		Serial.print("; ");
-		Serial.print(euler.z(), 4);
-		Serial.print("]");
-
-	}
-
-	logFile.print(euler.x(), 4);
-	logFile.print(", ");
-	logFile.print(euler.y(), 4);
-	logFile.print(", ");
-	logFile.print(euler.z(), 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_q_imu2body){
-		tlm_pos = addFloatToTlm( quat_imu2body.x(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_imu2body.y(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_imu2body.z(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_imu2body.w(), telemetry_data, tlm_pos);
-
-		Serial.print(" imu2body: ");
-		Serial.print("[");
-		Serial.print(quat_imu2body.x(), 4);
-		Serial.print("; ");
-		Serial.print(quat_imu2body.y(), 4);
-		Serial.print("; ");
-		Serial.print(quat_imu2body.z(), 4);
-		Serial.print("; ");
-		Serial.print(quat_imu2body.w(), 4);
-		Serial.print("]");
-	}
-
-	logFile.print(quat_imu2body.x(), 4);
-	logFile.print(", ");
-	logFile.print(quat_imu2body.y(), 4);
-	logFile.print(", ");
-	logFile.print(quat_imu2body.z(), 4);
-	logFile.print(", ");
-	logFile.print(quat_imu2body.w(), 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_q_ned2imu){
-		tlm_pos = addFloatToTlm( quat_ned2imu.x(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_ned2imu.y(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_ned2imu.z(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_ned2imu.w(), telemetry_data, tlm_pos);
-
-		Serial.print(" ned2imu: ");
-		Serial.print("[");
-		Serial.print(quat_ned2imu.x(), 4);
-		Serial.print("; ");
-		Serial.print(quat_ned2imu.y(), 4);
-		Serial.print("; ");
-		Serial.print(quat_ned2imu.z(), 4);
-		Serial.print("; ");
-		Serial.print(quat_ned2imu.w(), 4);
-		Serial.print("]");    
-	}
-
-	logFile.print(quat_ned2imu.x(), 4);
-	logFile.print(", ");
-	logFile.print(quat_ned2imu.y(), 4);
-	logFile.print(", ");
-	logFile.print(quat_ned2imu.z(), 4);
-	logFile.print(", ");
-	logFile.print(quat_ned2imu.w(), 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_q_ned2body){
-		tlm_pos = addFloatToTlm( quat_ned2body.x(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_ned2body.y(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_ned2body.z(), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( quat_ned2body.w(), telemetry_data, tlm_pos);
-
-		Serial.print(" ned2body: ");
-		Serial.print("[");
-		Serial.print(quat_ned2body.x(), 4);
-		Serial.print("; ");
-		Serial.print(quat_ned2body.y(), 4);
-		Serial.print("; ");
-		Serial.print(quat_ned2body.z(), 4);
-		Serial.print("; ");
-		Serial.print(quat_ned2body.w(), 4);
-		Serial.print("]");
-
-	}
-
-	logFile.print(quat_ned2body.x(), 4);
-	logFile.print(", ");
-	logFile.print(quat_ned2body.y(), 4);
-	logFile.print(", ");
-	logFile.print(quat_ned2body.z(), 4);
-	logFile.print(", ");
-	logFile.print(quat_ned2body.w(), 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_v_targetbody){
-		tlm_pos = addFloatToTlm( target_body(0), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( target_body(1), telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( target_body(2), telemetry_data, tlm_pos);
-
-		Serial.print(" target_body: ");
-		Serial.print("[");
-		Serial.print(target_body(0), 4);
-		Serial.print("; ");
-		Serial.print(target_body(1), 4);
-		Serial.print("; ");
-		Serial.print(target_body(2), 4);
-		Serial.print("]");
-
-	}
-
-	logFile.print(target_body(0), 4);
-	logFile.print(", ");
-	logFile.print(target_body(1), 4);
-	logFile.print(", ");
-	logFile.print(target_body(2), 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_AzElErr){
-		tlm_pos = addFloatToTlm( pterr_az, telemetry_data, tlm_pos);
-		tlm_pos = addFloatToTlm( pterr_el, telemetry_data, tlm_pos);
-
-		Serial.print(" az_el err: ");
-		Serial.print("[");
-		Serial.print(pterr_az,4);
-		Serial.print("; ");
-		Serial.print(pterr_el,4);
-		Serial.print("]");
-	}
-
-	logFile.print(pterr_az, 4);
-	logFile.print(", ");
-	logFile.print(pterr_el, 4);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_ElCmd){
-		tlm_pos = addIntToTlm(servo_cmd, telemetry_data, tlm_pos);
-
-		Serial.print(" Cmd: ");
-		Serial.print(servo_cmd);
-	}
-
-	logFile.print(servo_cmd);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_CycleTime){
-		tlm_pos = addIntToTlm(cycle_time, telemetry_data, tlm_pos);
-
-		Serial.print(" CycTime: ");
-		Serial.print(cycle_time);
-	}
-
-	logFile.print(cycle_time);
-	logFile.print(", ");
-    
-	if(tlmctrl & TLMMask_CmdRcvd){
-		tlm_pos = addIntToTlm(desiredcycletime, telemetry_data, tlm_pos);
-
-		Serial.print(" DesiredCycTime: ");
-		Serial.print(desiredcycletime);
-	}
-
-	logFile.print(desiredcycletime);
-	logFile.print(", ");
-	
-	if(tlmctrl & TLMMask_DesiredCycTime){
-		tlm_pos = addIntToTlm(desiredcycletime, telemetry_data, tlm_pos);
-
-		Serial.print(" DesiredCycTime: ");
-		Serial.print(desiredcycletime);
-	}
-
-	logFile.print(desiredcycletime);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_CmdEcho){
-		tlm_pos = addIntToTlm(fcncode, telemetry_data, tlm_pos);
-
-		Serial.print(" FcnCodeEcho: ");
-		Serial.print(fcncode);
-	}
-
-	logFile.print(fcncode);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_Temp1){
-		tlm_pos = addFloatToTlm(temp1, telemetry_data, tlm_pos);
-
-		Serial.print(" temp1: ");
-		Serial.print(temp1);
-	}
-
-	logFile.print(temp1);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_Temp2){
-		tlm_pos = addFloatToTlm(temp2, telemetry_data, tlm_pos);
-
-		Serial.print(" temp2: ");
-		Serial.print(temp2);
-	}
-
-	logFile.print(temp2);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_TempBME){
-		tlm_pos = addFloatToTlm(tempbme, telemetry_data, tlm_pos);
-
-		Serial.print(" tempbme: ");
-		Serial.print(tempbme);
-	}
-
-	logFile.print(tempbme);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_Pres){
-		tlm_pos = addFloatToTlm(pres, telemetry_data, tlm_pos);
-
-		Serial.print(" pres: ");
-		Serial.print(pres);
-	}
-
-	logFile.print(pres);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_PresAlt){
-		tlm_pos = addFloatToTlm(alt, telemetry_data, tlm_pos);
-
-		Serial.print(" alt: ");
-		Serial.print(alt);
-	}
-
-	logFile.print(alt);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_Humid){
-		tlm_pos = addFloatToTlm(humid, telemetry_data, tlm_pos);
-
-		Serial.print(" humid: ");
-		Serial.print(humid);
-	}
-
-	logFile.print(humid);
-	logFile.print(", ");
-
-	if(tlmctrl & TlmMask_Current){
-		tlm_pos = addIntToTlm(raw_current, telemetry_data, tlm_pos);
-
-		Serial.print(" current: ");
-		Serial.print(raw_current);
-	}
-
-	logFile.print(raw_current);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_Volt){
-		tlm_pos = addIntToTlm(raw_voltage, telemetry_data, tlm_pos);
-
-		Serial.print(" voltage: ");
-		Serial.print(raw_voltage);
-	}
-
-	logFile.print(raw_voltage);
-	logFile.print(", ");
-	
-	if(tlmctrl & TLMMask_InitStat){
-		tlm_pos = addIntToTlm(initstatus, telemetry_data, tlm_pos);
-
-		Serial.print(" initstat: ");
-		Serial.print(initstatus);
-	}
-
-	logFile.print(initstatus);
-	logFile.print(", ");
-  
-	if(tlmctrl & TLMMask_MsgSent){
-		tlm_pos = addIntToTlm(_SendCtr, telemetry_data, tlm_pos);
-
-		Serial.print(" msg sent: ");
-		Serial.print(_SendCtr);
-	}
-
-	logFile.print(_SendCtr);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_MsgRcvd){
-		// counter maintained by ccsds_xbee.c
-		tlm_pos = addIntToTlm(_RcvdCtr, telemetry_data, tlm_pos);
-
-		Serial.print(" tlmcnt: ");
-		Serial.print(_RcvdCtr);
-	}
-
-	logFile.print(_RcvdCtr);
-	logFile.print(", ");
-
-	if(tlmctrl & TLMMask_Mode){
-		tlm_pos = addIntToTlm(op_mode, telemetry_data, tlm_pos);
-
-		Serial.print(" mode: ");
-		Serial.print(op_mode);
-	}
-
-	logFile.print(op_mode);
-	logFile.print(", ");
-  
-	if(tlmctrl){
-		Serial.println(" ");
-	}
-	
-	return tlm_pos;
-}
-
-void cmdResponse(uint8_t _fcncode, uint8_t params[], uint8_t bytesread){
-  
-  uint32_t tmp_tlmctrl = 0x00001000;
-  uint8_t tmp_tlm_len = 0;
-  tmp_tlm_len = extractFromTlm(tmp_tlmctrl, incomingByte, tmp_tlm_len);
-  tmp_tlm_len = extractFromTlm(fcncode, incomingByte, tmp_tlm_len);
-  sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
-  
-	uint8_t pkt_pos = 0;
-
-	if(_fcncode == CMD_SetTlmCtrl){
-		pkt_pos = extractFromTlm(tlmctrl, incomingByte, pkt_pos);
-
-		Serial.print(" TlmCtrlCmd: ");
-		Serial.println(tlmctrl);
-	}
-	else if(_fcncode == CMD_SetCycTime){
-		pkt_pos = extractFromTlm(desiredcycletime, incomingByte, pkt_pos);
-
-		Serial.print(" Setting DesiredCycTime to: ");
-		Serial.println(desiredcycletime);
-	}
-	else if(_fcncode == CMD_SetTargetNED){
-		float tmp_float = 0.0;
-		pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
-		target_ned(0) = tmp_float;
-		pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
-		target_ned(1) = tmp_float;
-		pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
-		target_ned(2) = tmp_float;
-
-		Serial.print(" Setting TargetNED to: [");
-		Serial.print(target_ned(0));
-		Serial.print("; ");
-		Serial.print(target_ned(2));
-		Serial.print("; ");
-		Serial.print(target_ned(2));
-		Serial.println("]");
-	// target_ned = imu::Vector<3>(1.0, 0.0, 0.0);
-	}
-	else if(_fcncode == CMD_SetIMU2BODY){
-		float tmp_float, tmp_float1, tmp_float2, tmp_float3;
-		pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
-		pkt_pos = extractFromTlm(tmp_float1, incomingByte, pkt_pos);
-		pkt_pos = extractFromTlm(tmp_float2, incomingByte, pkt_pos);
-		pkt_pos = extractFromTlm(tmp_float3, incomingByte, pkt_pos);
-		quat_imu2body = imu::Quaternion(tmp_float, tmp_float1, tmp_float2, tmp_float3);
-
-		Serial.print(" Setting IMU2Body to: [");
-		Serial.print(tmp_float);
-		Serial.print("; ");
-		Serial.print(tmp_float);
-		Serial.print("; ");
-		Serial.print(tmp_float);
-		Serial.print("; ");
-		Serial.print(tmp_float);
-		Serial.println("]");
-	}
-	else if(_fcncode == CMD_SetServoEnable){
-		extractFromTlm(ServoEnableFlg, incomingByte, pkt_pos);
-
-		Serial.print(" Setting ServoEnable to: ");
-		Serial.println(incomingByte[9]);
-	}
-	else if(_fcncode == CMD_SetRWEnable){
-		uint8_t tmp_uint8 = 0;
-		Serial.print(" Setting RWEnable to: ");
-		pkt_pos = extractFromTlm(tmp_uint8, incomingByte, pkt_pos);
-		Serial.println(tmp_uint8);
-	}
-	else if(_fcncode == CMD_RequestTlmPt){
-		Serial.print(" Sending TlmCtrl: ");
-    Serial.println(tmp_tlmctrl);
-		
-		uint32_t tmp_tlmctrl = 0;
-		uint8_t tmp_tlm_len = 0;
-		pkt_pos = extractFromTlm(tmp_tlmctrl, incomingByte, pkt_pos);
-
-		tmp_tlm_len = compileTLM(tmp_tlmctrl);
-		sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
-
-	}
-	else if(_fcncode == CMD_SendTestPkt){
-		Serial.print(" Sending test packet");
-		
-		uint8_t telemetry_data[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
-		sendTlmMsg( tlm_addr, telemetry_data, 0);
-	}
-	else if(_fcncode == CMD_SetTlmAddr){
-		pkt_pos = extractFromTlm(tlm_addr, incomingByte, pkt_pos);
-		Serial.print(" Setting tlm addr:");
-		Serial.println(tlm_addr);
-	}
-	else if(_fcncode == CMD_SetElPolarity){
-		pkt_pos = extractFromTlm(El_Cmd_Polarity, incomingByte, pkt_pos);
-		Serial.print(" El cmd polarity:");
-		Serial.println(El_Cmd_Polarity);
-	}
-	else if(_fcncode == CMD_SetMode){
-		pkt_pos = extractFromTlm(op_mode, incomingByte, pkt_pos);
-		Serial.print(" Mode: ");
-		Serial.println(op_mode);
-		
-		if(op_mode == MODE_Manual)
-			pkt_pos = extractFromTlm(man_el_ang, incomingByte, pkt_pos);
-			Serial.print(" El: ");
-			Serial.println(man_el_ang);
-	}
- else{
-    Serial.print("Unrecongized command...");
- }
-	
-}
-
 void calcPtErr(imu::Vector<3> target_body, imu::Vector<3> x_axis, imu::Vector<3> y_axis, float &pterr_az, float &pterr_el){
 	
 	// calculate az error
@@ -775,30 +253,626 @@ void calcPtErr(imu::Vector<3> target_body, imu::Vector<3> x_axis, imu::Vector<3>
     }
 }
 
-void BADASS(){
-	Serial.println(F("BBBBBBBBBBBBBBBBB              AAA              DDDDDDDDDDDDD                 AAA                SSSSSSSSSSSSSSS   SSSSSSSSSSSSSSS"));
-	Serial.println(F("B::::::::::::::::B            A:::A             D::::::::::::DDD             A:::A             SS:::::::::::::::SSS:::::::::::::::S"));
-	Serial.println(F("B::::::BBBBBB:::::B          A:::::A            D:::::::::::::::DD          A:::::A           S:::::SSSSSS::::::S:::::SSSSSS::::::S"));
-	Serial.println(F("BB:::::B     B:::::B        A:::::::A           DDD:::::DDDDD:::::D        A:::::::A          S:::::S     SSSSSSS:::::S     SSSSSSS"));
-	Serial.println(F("B::::B     B:::::B        A:::::::::A            D:::::D    D:::::D      A:::::::::A         S:::::S           S:::::S            "));
-	Serial.println(F("B::::B     B:::::B       A:::::A:::::A           D:::::D     D:::::D    A:::::A:::::A        S:::::S           S:::::S            "));
-	Serial.println(F("B::::BBBBBB:::::B       A:::::A A:::::A          D:::::D     D:::::D   A:::::A A:::::A        S::::SSSS         S::::SSSS         "));
-	Serial.println(F("B:::::::::::::BB       A:::::A   A:::::A         D:::::D     D:::::D  A:::::A   A:::::A        SS::::::SSSSS     SS::::::SSSSS    "));
-	Serial.println(F("B::::BBBBBB:::::B     A:::::A     A:::::A        D:::::D     D:::::D A:::::A     A:::::A         SSS::::::::SS     SSS::::::::SS  "));
-	Serial.println(F("B::::B     B:::::B   A:::::AAAAAAAAA:::::A       D:::::D     D:::::DA:::::AAAAAAAAA:::::A           SSSSSS::::S       SSSSSS::::S "));
-	Serial.println(F("B::::B     B:::::B  A:::::::::::::::::::::A      D:::::D     D:::::A:::::::::::::::::::::A               S:::::S           S:::::S"));
-	Serial.println(F("B::::B     B:::::B A:::::AAAAAAAAAAAAA:::::A     D:::::D    D:::::A:::::AAAAAAAAAAAAA:::::A              S:::::S           S:::::S"));
-	Serial.println(F("BB:::::BBBBBB::::::A:::::A             A:::::A  DDD:::::DDDDD:::::A:::::A             A:::::A SSSSSSS     S:::::SSSSSSS     S:::::S"));
-	Serial.println(F("B:::::::::::::::::A:::::A               A:::::A D:::::::::::::::DA:::::A               A:::::AS::::::SSSSSS:::::S::::::SSSSSS:::::S"));
-	Serial.println(F("B::::::::::::::::A:::::A                 A:::::AD::::::::::::DDDA:::::A                 A:::::S:::::::::::::::SSS:::::::::::::::SS "));
-	Serial.println(F("BBBBBBBBBBBBBBBBAAAAAAA                   AAAAAADDDDDDDDDDDDD  AAAAAAA                   AAAAAASSSSSSSSSSSSSSS   SSSSSSSSSSSSSSS   "));
-   
+
+void logData(uint32_t tlmctrl){
+// log requested telemetry to file on SD card
+  
+  // open the file
+  logFile = SD.open(filename, FILE_WRITE);
+  
+  // telemetry compilation
+  if(tlmctrl & TLMMask_TlmCtrl){
+
+    logFile.print(tlmctrl);
+    logFile.print(", ");
+
+  }
+  
+  //logFile.print(cycle_start_time);
+  //logFile.print(", ");
+  
+  if(tlmctrl & TLMMask_TargetNED){
+    logFile.print(target_ned(0), 4);
+    logFile.print(", ");
+    logFile.print(target_ned(1), 4);
+    logFile.print(", ");
+    logFile.print(target_ned(2), 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_BNOCal){
+    logFile.print(sys_cal);
+    logFile.print(", ");
+    logFile.print(gyro_cal);
+    logFile.print(", ");
+    logFile.print(accel_cal);
+    logFile.print(", ");
+    logFile.print(mag_cal);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_EulerAng){
+    logFile.print(euler.x(), 4);
+    logFile.print(", ");
+    logFile.print(euler.y(), 4);
+    logFile.print(", ");
+    logFile.print(euler.z(), 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_q_imu2body){
+    logFile.print(quat_imu2body.x(), 4);
+    logFile.print(", ");
+    logFile.print(quat_imu2body.y(), 4);
+    logFile.print(", ");
+    logFile.print(quat_imu2body.z(), 4);
+    logFile.print(", ");
+    logFile.print(quat_imu2body.w(), 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_q_ned2imu){
+    logFile.print(quat_ned2imu.x(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu.y(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu.z(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu.w(), 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_q_ned2body){
+    logFile.print(quat_ned2body.x(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2body.y(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2body.z(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2body.w(), 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_v_targetbody){
+    logFile.print(target_body(0), 4);
+    logFile.print(", ");
+    logFile.print(target_body(1), 4);
+    logFile.print(", ");
+    logFile.print(target_body(2), 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_AzElErr){
+    logFile.print(pterr_az, 4);
+    logFile.print(", ");
+    logFile.print(pterr_el, 4);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_ElCmd){
+    logFile.print(servo_cmd);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_CycleTime){
+    logFile.print(ctrl_cycle_start);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_CmdRcvd){
+    logFile.print(fcncode);
+    logFile.print(", ");  
+  }
+  
+  if(tlmctrl & TLMMask_DesiredCycTime){
+    logFile.print(desiredctrltime);
+    logFile.print(", ");
+  }
+    
+  if(tlmctrl & TLMMask_Temp1){
+    logFile.print(temp1);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_Temp2){
+    logFile.print(temp2);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_TempBME){
+    logFile.print(tempbme);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_Pres){
+    logFile.print(pres);
+    logFile.print(", ");  
+  }
+  
+  if(tlmctrl & TLMMask_PresAlt){
+    logFile.print(alt);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_Humid){
+    logFile.print(humid);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TlmMask_Current){
+    logFile.print(raw_current);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_Volt){
+    logFile.print(raw_voltage);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_InitStat){
+    logFile.print(initstatus);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_MsgSent){
+    logFile.print(_SendCtr);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_MsgRcvd){
+    logFile.print(_RcvdCtr);
+    logFile.print(", ");
+  }
+  
+  if(tlmctrl & TLMMask_Mode){
+    logFile.print(op_mode);
+    logFile.print(", ");
+  }
+  
+  // close the file
+  logFile.println();
+  logFile.close();
+  
 }
   
+uint8_t compileTLM(uint32_t tlmctrl){
+// compiles the requested telemetry into a bytearray
+
+  // initalize position in array
+  uint8_t tlm_pos = 0;
+  
+  // telemetry compilation
+  if(tlmctrl & TLMMask_TlmCtrl){
+    tlm_pos = addIntToTlm(tlmctrl, telemetry_data, tlm_pos);
+
+    Serial.print(" tlmctrl: ");
+    Serial.print(tlmctrl);
+
+  }
+
+  if(tlmctrl & TLMMask_TargetNED){
+    tlm_pos = addFloatToTlm( target_ned(0), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( target_ned(1), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( target_ned(2), telemetry_data, tlm_pos);
+
+    Serial.print(" target_ned: ");
+    Serial.print(target_ned(0), 4);
+    Serial.print(" ");
+    Serial.print(target_ned(1), 4);
+    Serial.print(" ");
+    Serial.print(target_ned(2), 4);
+  }
+
+  if(tlmctrl & TLMMask_BNOCal){
+    tlm_pos = addIntToTlm(sys_cal, telemetry_data, tlm_pos);
+    tlm_pos = addIntToTlm(gyro_cal, telemetry_data, tlm_pos);
+    tlm_pos = addIntToTlm(accel_cal, telemetry_data, tlm_pos);
+    tlm_pos = addIntToTlm(mag_cal, telemetry_data, tlm_pos);
+
+    Serial.print(" Cal: ");
+    Serial.print(sys_cal);
+    Serial.print(" ");
+    Serial.print(gyro_cal);
+    Serial.print(" ");
+    Serial.print(accel_cal);
+    Serial.print(" ");
+    Serial.print(mag_cal);
+
+  }
+
+  if(tlmctrl & TLMMask_EulerAng){
+    tlm_pos = addFloatToTlm( euler.x(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( euler.y(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( euler.z(), telemetry_data, tlm_pos);
+
+    Serial.print(" euler ang: ");
+    Serial.print("[");
+    Serial.print(euler.x(), 4);
+    Serial.print("; ");
+    Serial.print(euler.y(), 4);
+    Serial.print("; ");
+    Serial.print(euler.z(), 4);
+    Serial.print("]");
+
+  }
+
+  if(tlmctrl & TLMMask_q_imu2body){
+    tlm_pos = addFloatToTlm( quat_imu2body.x(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_imu2body.y(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_imu2body.z(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_imu2body.w(), telemetry_data, tlm_pos);
+
+    Serial.print(" imu2body: ");
+    Serial.print("[");
+    Serial.print(quat_imu2body.x(), 4);
+    Serial.print("; ");
+    Serial.print(quat_imu2body.y(), 4);
+    Serial.print("; ");
+    Serial.print(quat_imu2body.z(), 4);
+    Serial.print("; ");
+    Serial.print(quat_imu2body.w(), 4);
+    Serial.print("]");
+  }
+
+  if(tlmctrl & TLMMask_q_ned2imu){
+    tlm_pos = addFloatToTlm( quat_ned2imu.x(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_ned2imu.y(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_ned2imu.z(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_ned2imu.w(), telemetry_data, tlm_pos);
+
+    Serial.print(" ned2imu: ");
+    Serial.print("[");
+    Serial.print(quat_ned2imu.x(), 4);
+    Serial.print("; ");
+    Serial.print(quat_ned2imu.y(), 4);
+    Serial.print("; ");
+    Serial.print(quat_ned2imu.z(), 4);
+    Serial.print("; ");
+    Serial.print(quat_ned2imu.w(), 4);
+    Serial.print("]");    
+  }
+
+  if(tlmctrl & TLMMask_q_ned2body){
+    tlm_pos = addFloatToTlm( quat_ned2body.x(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_ned2body.y(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_ned2body.z(), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( quat_ned2body.w(), telemetry_data, tlm_pos);
+
+    Serial.print(" ned2body: ");
+    Serial.print("[");
+    Serial.print(quat_ned2body.x(), 4);
+    Serial.print("; ");
+    Serial.print(quat_ned2body.y(), 4);
+    Serial.print("; ");
+    Serial.print(quat_ned2body.z(), 4);
+    Serial.print("; ");
+    Serial.print(quat_ned2body.w(), 4);
+    Serial.print("]");
+
+  }
+
+  if(tlmctrl & TLMMask_v_targetbody){
+    tlm_pos = addFloatToTlm( target_body(0), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( target_body(1), telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( target_body(2), telemetry_data, tlm_pos);
+
+    Serial.print(" target_body: ");
+    Serial.print("[");
+    Serial.print(target_body(0), 4);
+    Serial.print("; ");
+    Serial.print(target_body(1), 4);
+    Serial.print("; ");
+    Serial.print(target_body(2), 4);
+    Serial.print("]");
+
+  }
+
+  if(tlmctrl & TLMMask_AzElErr){
+    tlm_pos = addFloatToTlm( pterr_az, telemetry_data, tlm_pos);
+    tlm_pos = addFloatToTlm( pterr_el, telemetry_data, tlm_pos);
+
+    Serial.print(" az_el err: ");
+    Serial.print("[");
+    Serial.print(pterr_az,4);
+    Serial.print("; ");
+    Serial.print(pterr_el,4);
+    Serial.print("]");
+  }
+
+  if(tlmctrl & TLMMask_ElCmd){
+    tlm_pos = addIntToTlm(servo_cmd, telemetry_data, tlm_pos);
+
+    Serial.print(" Cmd: ");
+    Serial.print(servo_cmd);
+  }
+
+  if(tlmctrl & TLMMask_CycleTime){
+    tlm_pos = addIntToTlm(ctrl_cycle_start, telemetry_data, tlm_pos);
+
+    Serial.print(" CycTime: ");
+    Serial.print(ctrl_cycle_start);
+  }
+    
+  if(tlmctrl & TLMMask_CmdRcvd){
+    tlm_pos = addIntToTlm(fcncode, telemetry_data, tlm_pos);
+
+    Serial.print(" FcnCodeEcho: ");
+    Serial.print(fcncode);
+  }
+  
+  if(tlmctrl & TLMMask_DesiredCycTime){
+    tlm_pos = addIntToTlm(desiredctrltime, telemetry_data, tlm_pos);
+
+    Serial.print(" DesiredCycTime: ");
+    Serial.print(desiredctrltime);
+  }
+
+  if(tlmctrl & TLMMask_Temp1){
+    tlm_pos = addFloatToTlm(temp1, telemetry_data, tlm_pos);
+
+    Serial.print(" temp1: ");
+    Serial.print(temp1);
+  }
+
+  if(tlmctrl & TLMMask_Temp2){
+    tlm_pos = addFloatToTlm(temp2, telemetry_data, tlm_pos);
+
+    Serial.print(" temp2: ");
+    Serial.print(temp2);
+  }
+
+  if(tlmctrl & TLMMask_TempBME){
+    tlm_pos = addFloatToTlm(tempbme, telemetry_data, tlm_pos);
+
+    Serial.print(" tempbme: ");
+    Serial.print(tempbme);
+  }
+
+  if(tlmctrl & TLMMask_Pres){
+    tlm_pos = addFloatToTlm(pres, telemetry_data, tlm_pos);
+
+    Serial.print(" pres: ");
+    Serial.print(pres);
+  }
+
+  if(tlmctrl & TLMMask_PresAlt){
+    tlm_pos = addFloatToTlm(alt, telemetry_data, tlm_pos);
+
+    Serial.print(" alt: ");
+    Serial.print(alt);
+  }
+
+  if(tlmctrl & TLMMask_Humid){
+    tlm_pos = addFloatToTlm(humid, telemetry_data, tlm_pos);
+
+    Serial.print(" humid: ");
+    Serial.print(humid);
+  }
+
+  if(tlmctrl & TlmMask_Current){
+    tlm_pos = addIntToTlm(raw_current, telemetry_data, tlm_pos);
+
+    Serial.print(" current: ");
+    Serial.print(raw_current);
+  }
+
+  if(tlmctrl & TLMMask_Volt){
+    tlm_pos = addIntToTlm(raw_voltage, telemetry_data, tlm_pos);
+
+    Serial.print(" voltage: ");
+    Serial.print(raw_voltage);
+  }
+  
+  if(tlmctrl & TLMMask_InitStat){
+    tlm_pos = addIntToTlm(initstatus, telemetry_data, tlm_pos);
+
+    Serial.print(" initstat: ");
+    Serial.print(initstatus);
+  }
+  
+  if(tlmctrl & TLMMask_MsgSent){
+    tlm_pos = addIntToTlm(_SendCtr, telemetry_data, tlm_pos);
+
+    Serial.print(" msg sent: ");
+    Serial.print(_SendCtr);
+  }
+
+  if(tlmctrl & TLMMask_MsgRcvd){
+    // counter maintained by ccsds_xbee.c
+    tlm_pos = addIntToTlm(_RcvdCtr, telemetry_data, tlm_pos);
+
+    Serial.print(" tlmcnt: ");
+    Serial.print(_RcvdCtr);
+  }
+
+  if(tlmctrl & TLMMask_Mode){
+    tlm_pos = addIntToTlm(op_mode, telemetry_data, tlm_pos);
+
+    Serial.print(" mode: ");
+    Serial.print(op_mode);
+  }
+  
+  
+  if(tlmctrl){
+    Serial.println(" ");
+  }
+  
+  return tlm_pos;
+}
+
+void BADASS(){
+  Serial.println(F("BBBBBBBBBBBBBBBBB              AAA              DDDDDDDDDDDDD                 AAA                SSSSSSSSSSSSSSS   SSSSSSSSSSSSSSS"));
+  Serial.println(F("B::::::::::::::::B            A:::A             D::::::::::::DDD             A:::A             SS:::::::::::::::SSS:::::::::::::::S"));
+  Serial.println(F("B::::::BBBBBB:::::B          A:::::A            D:::::::::::::::DD          A:::::A           S:::::SSSSSS::::::S:::::SSSSSS::::::S"));
+  Serial.println(F("BB:::::B     B:::::B        A:::::::A           DDD:::::DDDDD:::::D        A:::::::A          S:::::S     SSSSSSS:::::S     SSSSSSS"));
+  Serial.println(F("B::::B     B:::::B        A:::::::::A            D:::::D    D:::::D      A:::::::::A         S:::::S           S:::::S            "));
+  Serial.println(F("B::::B     B:::::B       A:::::A:::::A           D:::::D     D:::::D    A:::::A:::::A        S:::::S           S:::::S            "));
+  Serial.println(F("B::::BBBBBB:::::B       A:::::A A:::::A          D:::::D     D:::::D   A:::::A A:::::A        S::::SSSS         S::::SSSS         "));
+  Serial.println(F("B:::::::::::::BB       A:::::A   A:::::A         D:::::D     D:::::D  A:::::A   A:::::A        SS::::::SSSSS     SS::::::SSSSS    "));
+  Serial.println(F("B::::BBBBBB:::::B     A:::::A     A:::::A        D:::::D     D:::::D A:::::A     A:::::A         SSS::::::::SS     SSS::::::::SS  "));
+  Serial.println(F("B::::B     B:::::B   A:::::AAAAAAAAA:::::A       D:::::D     D:::::DA:::::AAAAAAAAA:::::A           SSSSSS::::S       SSSSSS::::S "));
+  Serial.println(F("B::::B     B:::::B  A:::::::::::::::::::::A      D:::::D     D:::::A:::::::::::::::::::::A               S:::::S           S:::::S"));
+  Serial.println(F("B::::B     B:::::B A:::::AAAAAAAAAAAAA:::::A     D:::::D    D:::::A:::::AAAAAAAAAAAAA:::::A              S:::::S           S:::::S"));
+  Serial.println(F("BB:::::BBBBBB::::::A:::::A             A:::::A  DDD:::::DDDDD:::::A:::::A             A:::::A SSSSSSS     S:::::SSSSSSS     S:::::S"));
+  Serial.println(F("B:::::::::::::::::A:::::A               A:::::A D:::::::::::::::DA:::::A               A:::::AS::::::SSSSSS:::::S::::::SSSSSS:::::S"));
+  Serial.println(F("B::::::::::::::::A:::::A                 A:::::AD::::::::::::DDDA:::::A                 A:::::S:::::::::::::::SSS:::::::::::::::SS "));
+  Serial.println(F("BBBBBBBBBBBBBBBBAAAAAAA                   AAAAAADDDDDDDDDDDDD  AAAAAAA                   AAAAAASSSSSSSSSSSSSSS   SSSSSSSSSSSSSSS   "));
+   
+}
+
+void cmdResponse(uint8_t _fcncode, uint8_t params[], uint8_t bytesread){
+  
+  uint32_t tmp_tlmctrl = 0x00001000;
+  uint8_t tmp_tlm_len = 0;
+  tmp_tlm_len = extractFromTlm(tmp_tlmctrl, incomingByte, tmp_tlm_len);
+  tmp_tlm_len = extractFromTlm(fcncode, incomingByte, tmp_tlm_len);
+  sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
+  
+  uint8_t pkt_pos = 0;
+
+  if(_fcncode == CMD_SetTlmCtrl){
+    pkt_pos = extractFromTlm(tlmctrl, incomingByte, pkt_pos);
+
+    Serial.print(" TlmCtrlCmd: ");
+    Serial.println(tlmctrl);
+  }
+  else if(_fcncode == CMD_SetCycTime){
+    pkt_pos = extractFromTlm(desiredctrltime, incomingByte, pkt_pos);
+
+    Serial.print(" Setting DesiredCycTime to: ");
+    Serial.println(desiredctrltime);
+  }
+  else if(_fcncode == CMD_SetTargetNED){
+    float tmp_float = 0.0;
+    pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
+    target_ned(0) = tmp_float;
+    pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
+    target_ned(1) = tmp_float;
+    pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
+    target_ned(2) = tmp_float;
+
+    Serial.print(" Setting TargetNED to: [");
+    Serial.print(target_ned(0));
+    Serial.print("; ");
+    Serial.print(target_ned(2));
+    Serial.print("; ");
+    Serial.print(target_ned(2));
+    Serial.println("]");
+  // target_ned = imu::Vector<3>(1.0, 0.0, 0.0);
+  }
+  else if(_fcncode == CMD_SetIMU2BODY){
+    float tmp_float, tmp_float1, tmp_float2, tmp_float3;
+    pkt_pos = extractFromTlm(tmp_float, incomingByte, pkt_pos);
+    pkt_pos = extractFromTlm(tmp_float1, incomingByte, pkt_pos);
+    pkt_pos = extractFromTlm(tmp_float2, incomingByte, pkt_pos);
+    pkt_pos = extractFromTlm(tmp_float3, incomingByte, pkt_pos);
+    quat_imu2body = imu::Quaternion(tmp_float, tmp_float1, tmp_float2, tmp_float3);
+
+    Serial.print(" Setting IMU2Body to: [");
+    Serial.print(tmp_float);
+    Serial.print("; ");
+    Serial.print(tmp_float);
+    Serial.print("; ");
+    Serial.print(tmp_float);
+    Serial.print("; ");
+    Serial.print(tmp_float);
+    Serial.println("]");
+  }
+  else if(_fcncode == CMD_SetServoEnable){
+    extractFromTlm(ServoEnableFlg, incomingByte, pkt_pos);
+
+    Serial.print(" Setting ServoEnable to: ");
+    Serial.println(incomingByte[9]);
+  }
+  else if(_fcncode == CMD_SetRWEnable){
+    uint8_t tmp_uint8 = 0;
+    Serial.print(" Setting RWEnable to: ");
+    pkt_pos = extractFromTlm(tmp_uint8, incomingByte, pkt_pos);
+    Serial.println(tmp_uint8);
+  }
+  else if(_fcncode == CMD_RequestTlmPt){
+    Serial.print(" Sending TlmCtrl: ");
+    Serial.println(tmp_tlmctrl);
+    
+    uint32_t tmp_tlmctrl = 0;
+    uint8_t tmp_tlm_len = 0;
+    pkt_pos = extractFromTlm(tmp_tlmctrl, incomingByte, pkt_pos);
+
+    tmp_tlm_len = compileTLM(tmp_tlmctrl);
+    sendTlmMsg( tlm_addr, telemetry_data, tmp_tlm_len);
+
+  }
+  else if(_fcncode == CMD_SendTestPkt){
+    Serial.print(" Sending test packet");
+    
+    uint8_t telemetry_data[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
+    sendTlmMsg( tlm_addr, telemetry_data, 0);
+  }
+  else if(_fcncode == CMD_SetTlmAddr){
+    pkt_pos = extractFromTlm(tlm_addr, incomingByte, pkt_pos);
+    Serial.print(" Setting tlm addr:");
+    Serial.println(tlm_addr);
+  }
+  else if(_fcncode == CMD_SetElPolarity){
+    pkt_pos = extractFromTlm(El_Cmd_Polarity, incomingByte, pkt_pos);
+    Serial.print(" El cmd polarity:");
+    Serial.println(El_Cmd_Polarity);
+  }
+  else if(_fcncode == CMD_SetMode){
+    pkt_pos = extractFromTlm(op_mode, incomingByte, pkt_pos);
+    Serial.print(" Mode: ");
+    Serial.println(op_mode);
+    
+    if(op_mode == MODE_Manual)
+      pkt_pos = extractFromTlm(man_el_ang, incomingByte, pkt_pos);
+      Serial.print(" El: ");
+      Serial.println(man_el_ang);
+  }
+ else{
+    Serial.print("Unrecongized command...");
+ }
+  
+}
+
+void getInput(){
+// checks if the xbee has received a message and processes it
+//     if it has
+  
+  // check if there's data to be read
+
+  if((pkt_type = readMsg(1)) == 0){
+    Serial.println("Read something else, reading again");
+    pkt_type = readMsg(1);
+  }
+ 
+  if (pkt_type > -1 ) {
+
+    // print info about the packet
+    printPktInfo();
+
+    // process based on command or telemetry packet
+    if(pkt_type){
+      bytesread = readCmdMsg(incomingByte, fcncode);
+      Serial.print("Fcncode: ");
+      Serial.print(fcncode);
+      // response to command
+      cmdResponse(fcncode, incomingByte, bytesread);
+      cmdrcvdcnt++;
+    }
+    else{
+      // read the telemetry message, don't currently have 
+      //  anything to do with it
+      bytesread = readTlmMsg(incomingByte);
+    }
+  } else if(pkt_type < -1){
+    Serial.print("Failed to read xbee with code: ");
+    Serial.println(pkt_type);
+  }
+}
 // ***********************************
 // Setup
 void setup() {
-
+  
 	////// Initalize Sensors
 	
 	// begin the serials
@@ -808,15 +882,15 @@ void setup() {
 	// print the splash screen
 	BADASS();
 
-	Serial.print("Starting BNO initialization...");
 	// initalize the BNO
+	Serial.print("Starting BNO initialization...");
 	if(!bno.begin(bno.OPERATION_MODE_NDOF))
 	{
 		
 		/* There was a problem detecting the BNO055 ... check your connections */
 		Serial.println(" Failed!");
 		
-		initstatus |= (BNO_MASK & 0xFFFF);
+		initstatus |= (INITMASK_BNO & 0xFFFF);
 	}
 	else{
 		Serial.println(" Initalized!");
@@ -846,7 +920,7 @@ void setup() {
 
 	if (!SD.begin(SD_PIN)) {
 		Serial.println(" Failed!");
-		initstatus |= (SD_MASK & 0xFFFF);
+		initstatus |= (INITMASK_SD & 0xFFFF);
 	}
 	else{
 		Serial.println(" Initalized!");
@@ -880,7 +954,7 @@ void setup() {
 		Serial.println(" Initalized!");
 	} else {
 		Serial.println(" Failed!");
-		initstatus |= (MCP9808_1_MASK & 0xFFFF);
+		initstatus |= (INITMASK_MCP9808_1 & 0xFFFF);
 	}
 	
 	// initalize MCP9808_2
@@ -889,7 +963,7 @@ void setup() {
 		Serial.println(" Initalized!");
 	} else {
 		Serial.println(" Failed!");
-		initstatus |= (MCP9808_2_MASK & 0xFFFF);
+		initstatus |= (INITMASK_MCP9808_2 & 0xFFFF);
 	}
 	
 	// initalize bme
@@ -898,7 +972,7 @@ void setup() {
 		Serial.println(" Initalized!");
 	} else {
 		Serial.println(" Failed!");
-		initstatus |= (bme_MASK & 0xFFFF);
+		initstatus |= (INITMASK_BME & 0xFFFF);
 	}
 	
 	// initalize xbee
@@ -907,7 +981,7 @@ void setup() {
 		Serial.println(" Initalized!");
 	} else {
 		Serial.println(" Failed!");
-		initstatus |= (xbee_MASK & 0xFFFF);
+		initstatus |= (INITMASK_xbee & 0xFFFF);
 	}
   
 	// initalize servo
@@ -918,7 +992,7 @@ void setup() {
 		servo1.write(90);
 	} else {
 		Serial.println(" Failed!");
-		initstatus |= (servo_MASK & 0xFFFF);
+		initstatus |= (INITMASK_servo & 0xFFFF);
 	}
 	
 	// normalize the target
@@ -940,60 +1014,51 @@ void setup() {
  
 }
 
-void getInput(){
-// checks if the xbee has received a message and processes it
-// 		if it has
-	
-	// check if there's data to be read
-
-  if((pkt_type = readMsg(1)) == 0){
-    Serial.println("Read something else, reading again");
-    pkt_type = readMsg(1);
-  }
- 
-	if (pkt_type > -1 ) {
-
-		// print info about the packet
-		printPktInfo();
-
-		// process based on command or telemetry packet
-		if(pkt_type){
-			bytesread = readCmdMsg(incomingByte, fcncode);
-      Serial.print("Fcncode: ");
-      Serial.print(fcncode);
-			// response to command
-			cmdResponse(fcncode, incomingByte, bytesread);
-      cmdrcvdcnt++;
-		}
-		else{
-			// read the telemetry message, don't currently have 
-			// 	anything to do with it
-			bytesread = readTlmMsg(incomingByte);
-		}
-	} else if(pkt_type < -1){
-    Serial.print("Failed to read xbee with code: ");
-    Serial.println(pkt_type);
-	}
-}
-
-
 // ***********************************
 // Loop
 void loop() {
 
-
-  getInput();
+	// always respond to commands as soon as we receive them
+	// get any input packets
+	getInput();
   
-	cycle_time = millis() - cycle_start_time;
+	// calculate 
+  comm_cycle_time = millis() - comm_cycle_start;
+  IMUlog_cycle_time = millis() - IMUlog_cycle_start;
+	HKlog_cycle_time = millis() - HKlog_cycle_start;
+  ctrl_cycle_time = millis() - ctrl_cycle_start;
 
-	// only start next cycle if we've waited long enough
-	if(cycle_time > desiredcycletime){
-		cycle_start_time = millis();
+	// comm cycle
+	if(comm_cycle_time > desiredcommtime){
+		comm_cycle_start = millis();
     
-		logFile = SD.open(filename, FILE_WRITE);
-		logFile.write(cycle_start_time);
-		logFile.write(", ");
+		// compile telemetry
+		tlm_len = compileTLM(tlmctrl);
 
+		// send the packet
+		sendTlmMsg( tlm_addr, telemetry_data, tlm_len);
+	}
+	
+	// log IMU cycle
+	if(IMUlog_cycle_time > desiredIMUlogtime){
+		IMUlog_cycle_start = millis();
+   
+		// log IMU related data
+		logData((uint32_t) 0x000001C4);
+	}
+	
+	// log hk cycle
+	if(HKlog_cycle_time > desiredHKlogtime){
+		HKlog_cycle_start = millis();
+   
+		// log all data
+		logData(TLMMask_All);
+	}
+	
+	// only start next cycle if we've waited long enough
+	if(ctrl_cycle_time > desiredctrltime){
+		ctrl_cycle_start = millis();
+    
 		temp1 = tempsensor1.readTempC();
 		temp2 = tempsensor2.readTempC();
 		tempbme = bme.readTemperature();
@@ -1041,9 +1106,9 @@ void loop() {
 		
 		// map command onto servo range
 		if(El_Cmd_Polarity){
-			servo_cmd = map(cmd_el_ang*180/PI,-90,90,0,180);
+			servo_cmd = map(cmd_el_ang*180/PI,-90,90,min_el_ang,max_el_ang);
 		} else {
-			servo_cmd = map(cmd_el_ang*180/PI,-90,90,180,0);
+			servo_cmd = map(cmd_el_ang*180/PI,-90,90,max_el_ang,min_el_ang);
 		}
 
 		// command servo
@@ -1051,12 +1116,6 @@ void loop() {
 			servo1.write(servo_cmd);
 		}
 
-		tlm_len = compileTLM(tlmctrl);
-
-		sendTlmMsg( tlm_addr, telemetry_data, tlm_len);
-		tlmsentcnt++;
-		logFile.println();
-		logFile.close();
 
 	}
 }
