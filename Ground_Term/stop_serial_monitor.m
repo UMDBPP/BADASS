@@ -1,4 +1,7 @@
 function stop_serial_monitor()
+%
+%
+%
 
     % stop and delete the timer
     timers = timerfind;

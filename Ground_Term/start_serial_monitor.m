@@ -10,12 +10,13 @@ function start_serial_monitor(varargin)
 %       starts the telemetry monitor of the specified serial port at the
 %       specified baud rate
 %
-%   Sets up a timer callback to periodically check the serial port for new
+%   Sets up a timer callback to periodically poll the serial port for new
 %   input. Will attempt to identify the beginning of the packet and parse
 %   the byte-stream for a CCSDS header and packet format. Will read the
 %   telemetry into a database to allow processing.
 %
 
+    % add necessary folders to path
     setupPath()
 
     % set default inputs
@@ -82,9 +83,6 @@ function start_serial_monitor(varargin)
         addpath(fullfile(fileparts(mfilename('fullpath')),'logs'));
     end
     logfile = fopen('logs/log.txt','a');
-    
-    % assign the serial connection to the base workspace so the user can
-    % interact with it
 
     % create timer object
     t=timer;
@@ -102,9 +100,14 @@ function start_serial_monitor(varargin)
     assignin('base','logfile',logfile);
 end
 
-function ecallback(src, event, serConn, logfile)
-    
-disp(getReport(ME))
+function ecallback(~, ~, serConn, logfile)
+%
+% timer error callback. Gets the error are prints it for the user (since
+% error messages don't get printed to the command line if they occur in
+% timer callbacks). Also closes the serial connection and logfile and
+% cleans up the workspace.
+% 
+    disp(getReport(ME))
     err = lasterror();
     disp(err.message);
 
@@ -113,12 +116,12 @@ disp(getReport(ME))
     end
     
     % close the serial connection
-    fclose(serConn)
+    fclose(serConn);
     delete(serConn)
     evalin('base','clear serConn');
 
     % close the log file
-    fclose(logfile)
+    fclose(logfile);
     evalin('base','clear logfile');
 
     % clear the serial and timer objects from the base workspace
@@ -126,7 +129,8 @@ disp(getReport(ME))
     
 end
 
-function initTimer(src, event)
+function initTimer(src, ~)
+%
 %   initalizes the timer callback's userdata used to store bytes read from
 %   the serial port
 % 
@@ -144,15 +148,19 @@ function initTimer(src, event)
     
 end
 
-function closeTimer(src, event, serConn, logfile)
+function closeTimer(~, ~, serConn, logfile)
+%
+% timer close function callback. Closes the serial connection and log file
+% and cleans up the workspace.
+%
 
     % close the serial connection
-    fclose(serConn)
-    delete(serConn)
+    fclose(serConn);
+    delete(serConn);
     evalin('base','clear serConn');
 
     % close the log file
-    fclose(logfile)
+    fclose(logfile);
     evalin('base','clear logfile');
 
     % clear the serial and timer objects from the base workspace
@@ -160,7 +168,7 @@ function closeTimer(src, event, serConn, logfile)
     
 end
 
-function timerCallback(src, event, serConn, logfile)
+function timerCallback(src, ~, serConn, logfile)
 % called at timer frequency, reads data from serial port, processes it, and
 % saves it into the telemetry database
 
@@ -184,30 +192,22 @@ function timerCallback(src, event, serConn, logfile)
         % append the new data to what we've read previously
         UserData.ByteBuffer = [UserData.ByteBuffer data];
         
-%         for i = 1:length(UserData.ByteBuffer)
-%             fprintf('%d',UserData.ByteBuffer(i))
-%             fprintf(', ');
-%         end
-%         fprintf('\n');
-        
         % define the length of an xbee header
         xbee_hdr_len = 6;
 
         % look for link responses
         link_respond = strfind(UserData.ByteBuffer, [hex2dec('08') hex2dec('03')]);
-%         if(~isempty(link_respond))
-%             fprintf('Found link response! \n');
-%             UserData.ByteBuffer = UserData.ByteBuffer(link_respond(1)+20:end); 
-%         end
         
         % look for header bytes
         pkt_loc = strfind(UserData.ByteBuffer, [hex2dec('08') hex2dec('02')]);
         
+        % combine the results from looking for packets
         pkt_loc = [pkt_loc link_respond];
         
         % if a packet was found
         if(~isempty(pkt_loc))
             
+            % take the first packet found in the buffer
             pkt_loc = pkt_loc(1);
             
             fprintf('Found pkt at %d \n',pkt_loc);
@@ -230,7 +230,6 @@ function timerCallback(src, event, serConn, logfile)
                     fprintf(logfile,'R %s: ', datestr(now,'HH:MM:SS.FFF'));
 
                     for i=pkt_loc:pkt_loc+total_pktlen
-%                         dec2hex(UserData.ByteBuffer(i))
                         fprintf('%02s',dec2hex(UserData.ByteBuffer(i)));
                         fprintf(logfile,'%02s',dec2hex(UserData.ByteBuffer(i)));
                         if(i~=length(UserData.ByteBuffer))
@@ -258,6 +257,8 @@ function timerCallback(src, event, serConn, logfile)
         end
     end
     
+    % save the bytebuffer to the timer userdata and workspace for the next
+    % time
     set(src, 'UserData',UserData);
     assignin('base','ByteBuffer',UserData.ByteBuffer);
     

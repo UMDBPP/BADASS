@@ -7,6 +7,9 @@ function arr = sendCmd(APID,FcnCode,varargin)
 %   sendCmd(APID,FcnCode,varargin)
 %       sends a command, selected by FcnCode, to APID including parameters
 %
+%   Steve Lentine
+%   4/21/16
+%
 
     % get streams from base workspace
     if(~evalin('base','exist(''serConn'',''var'')'))
@@ -38,6 +41,7 @@ function arr = sendCmd(APID,FcnCode,varargin)
 	CMD_SetElPolarity = hex2dec('0A');
     CMD_SetMode = hex2dec('0B');
 
+    % associate commands with how many commands they take
     uint32_arg = [CMD_SetTlmCtrl CMD_RequestTlmPt];
     uint16_arg = [CMD_SetCycTime];
     uint8_arg = [CMD_SetServoEnable CMD_SetRWEnable CMD_SetElPolarity CMD_SetTlmAddr];

@@ -1,4 +1,14 @@
 function TLM = createTlmDatabase()
+% createTlmDatabase
+%
+%   createTlmDatabase()
+%       creates a structure suitable for saving telemetry data received
+%       from BADASS and LINK
+%
+%   Steve Lentine
+%   4/21/16
+%
+
 
 % header parameters
 % primary

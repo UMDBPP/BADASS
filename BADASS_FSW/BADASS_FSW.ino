@@ -131,15 +131,14 @@ float man_el_ang = 0.0;
 //  the program
 
 // timing
-int ctrl_cycle_start = 0;
-int HKlog_cycle_start = 0;
-int IMUlog_cycle_start = 0;
-int comm_cycle_start = 0;
+uint16_t ctrl_cycle_start = 0;
+uint16_t HKlog_cycle_start = 0;
+uint16_t IMUlog_cycle_start = 0;
+uint16_t comm_cycle_start = 0;
 
-int ctrl_cycle_time;
-int HKlog_cycle_time;
-int IMUlog_cycle_time;
-int comm_cycle_time;
+uint16_t HKlog_cycle_time;
+uint16_t IMUlog_cycle_time;
+uint16_t comm_cycle_time;
 
 // data buffers
 uint8_t incomingByte[100];
