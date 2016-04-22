@@ -9,7 +9,7 @@ modified.
 
 //////////////// include header
 #include "ccsds_xbee.h"
-#include "ccsds.h"
+#include "CCSDS.h"
 
 //////////////// initalize objects
 XBee xbee = XBee();

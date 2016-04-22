@@ -136,6 +136,7 @@ uint16_t HKlog_cycle_start = 0;
 uint16_t IMUlog_cycle_start = 0;
 uint16_t comm_cycle_start = 0;
 
+uint16_t ctrl_cycle_time;
 uint16_t HKlog_cycle_time;
 uint16_t IMUlog_cycle_time;
 uint16_t comm_cycle_time;

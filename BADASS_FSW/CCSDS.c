@@ -1,4 +1,4 @@
-#include "ccsds.h"
+#include "CCSDS.h"
 
 
 bool CCSDS_ValidCheckSum (CCSDS_CmdPkt_t *PktPtr)
