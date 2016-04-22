@@ -10,7 +10,7 @@ bool CCSDS_ValidCheckSum (uint8_t array[], uint8_t size) {
 
 
 uint8_t CCSDS_ComputeCheckSum (uint8_t array[], uint8_t size) {
-	uint8_t    CheckSum;
+	uint8_t    checksum;
 	checksum = 0xFF;	
 
 	// iterate through all data in array and bytewise XOR
