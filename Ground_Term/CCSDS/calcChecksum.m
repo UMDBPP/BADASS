@@ -12,7 +12,7 @@ function CheckSum = calcChecksum(arr)
     
     % loop through elements and calculate checksum
     for i=1:length(arr)
-        CheckSum = bitxor(CheckSum,arr(i));
+        CheckSum = bitxor(CheckSum,uint8(arr(i)));
     end
 
 end

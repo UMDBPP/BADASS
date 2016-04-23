@@ -1,10 +1,11 @@
 #include "CCSDS.h"
 
-
 bool CCSDS_ValidCheckSum (CCSDS_CmdPkt_t *PktPtr)
 {
-
    return (CCSDS_ComputeCheckSum(PktPtr) == 0);
+  // This works because when you XOR something with itself, it will be zero. 
+  // Checksum part becomes zero, and XOR with zero is identity, so it is as if 
+  // that byte was not there for the initial checksum.
 
 } /* END CCSDS_ValidCheckSum() */
 

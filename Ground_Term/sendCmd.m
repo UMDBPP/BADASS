@@ -104,13 +104,12 @@ function arr = sendCmd(APID,FcnCode,varargin)
     end
     
     
-    
     % update the length of the packet
     arr(5:6) = typecast(swapbytes(uint16(length(arr)-7)),'uint8');
     
     % update the packet checksum
     arr(7) = calcChecksum(arr);
-        
+            
     % write the packet
     fwrite(serConn,arr);
 

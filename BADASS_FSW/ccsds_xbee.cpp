@@ -23,8 +23,8 @@ uint8_t _packet_data[PKT_MAX_LEN];
 int _bytesread;
 
 uint32_t _SendCtr = 0;
-
 uint32_t _RcvdCtr = 0;
+uint32_t _CmdRejCtr = 0;
 
 void printHex(int num, int precision) {
      char tmp[16];
@@ -315,6 +315,8 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
 int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payload_size){
 
+  uint8_t _payload_size = payload_size;
+
   // if the user attempts to send a packet that's too long, don't do it
   if(payload_size +12 > PKT_MAX_LEN){
     Serial.println("Packet too long... not sending");
@@ -338,31 +340,30 @@ int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payloa
   CCSDS_WR_LEN(_PriHeader,payload_size+sizeof(_PriHeader)+sizeof(_CmdSecHeader));
 
   // fill secondary header fields
-  CCSDS_WR_CHECKSUM(_CmdSecHeader, 0xFF);
+  CCSDS_WR_CHECKSUM(_CmdSecHeader, 0x0);
   CCSDS_WR_FC(_CmdSecHeader, fcncode);
   
   // copy the primary header
   memcpy(packet_data, &_PriHeader, sizeof(_PriHeader));
-  payload_size += sizeof(_PriHeader);
+  _payload_size += sizeof(_PriHeader);
 
   // copy the secondary header
   memcpy(packet_data+sizeof(_PriHeader), &_CmdSecHeader, sizeof(_CmdSecHeader));
-  payload_size += sizeof(_CmdSecHeader);
+  _payload_size += sizeof(_CmdSecHeader);
+
+  // write the checksum after the header's been added
+  CCSDS_WR_CHECKSUM((*(CCSDS_CmdPkt_t*) _packet_data).SecHdr, CCSDS_ComputeCheckSum((CCSDS_CmdPkt_t*) _packet_data));
 
   // copy the packet data
-  memcpy(packet_data+sizeof(_PriHeader)+sizeof(_CmdSecHeader), payload, payload_size);
+  memcpy(packet_data+sizeof(_PriHeader)+sizeof(_CmdSecHeader), payload, _payload_size);
 
   // send the message
-  _sendData(SendAddr, packet_data, payload_size);
+  _sendData(SendAddr, packet_data, _payload_size);
 
   return 1;
 }
 
 int readMsg(uint16_t timeout){
-
-  // allocate the buffer to compile the packet in
-  uint8_t pkt_type = 0;
-  uint8_t bytesread = 0;
   
   // declare the header structures
   CCSDS_PriHdr_t _PriHeader;
@@ -372,8 +373,7 @@ int readMsg(uint16_t timeout){
         
   if(_bytesread > 0){
 
-    // copy the primary header into a structure
-    //memcpy(&_PriHeader, _packet_data, sizeof(_PriHeader));
+    // cast the primary header into the header structure
      _PriHeader = *(CCSDS_PriHdr_t*) (_packet_data);
 
     // return the packet type
@@ -390,6 +390,14 @@ int readMsg(uint16_t timeout){
 }
 
 int readCmdMsg(uint8_t params[], uint8_t &fcncode){
+
+  /*
+  if(CCSDS_ValidCheckSum ((CCSDS_CmdPkt_t*) (_packet_data))){
+    Serial.println("Invalid");
+    _CmdRejCtr++;
+    return -1;
+  }
+*/
 
   // declare the header structures
   CCSDS_PriHdr_t _PriHeader;
@@ -483,7 +491,7 @@ void printPktInfo(){
     // print the command-specific data
     Serial.print("FcnCode: ");
     Serial.print(CCSDS_RD_FC(_CmdSecHeader));
-    Serial.print("CkSum: ");
+    Serial.print(", CkSum: ");
     Serial.println(CCSDS_RD_CHECKSUM(_CmdSecHeader));
   }
   else{

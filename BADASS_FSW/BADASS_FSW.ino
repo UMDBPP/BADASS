@@ -853,11 +853,11 @@ void getInput(){
     // process based on command or telemetry packet
     if(pkt_type){
       bytesread = readCmdMsg(incomingByte, fcncode);
-      Serial.print("Fcncode: ");
-      Serial.print(fcncode);
-      // response to command
-      cmdResponse(fcncode, incomingByte, bytesread);
-      cmdrcvdcnt++;
+      if(bytesread > 0){
+        // response to command
+        cmdResponse(fcncode, incomingByte, bytesread);
+        cmdrcvdcnt++;
+      }
     }
     else{
       // read the telemetry message, don't currently have 
@@ -983,7 +983,7 @@ void setup() {
 		Serial.println(" Failed!");
 		initstatus |= (INITMASK_xbee & 0xFFFF);
 	}
-  
+  /*
 	// initalize servo
   Serial.print("Starting servo initialization...");
 	if(!servo1.attach(ServoPIN,900,2100)){
@@ -994,7 +994,7 @@ void setup() {
 		Serial.println(" Failed!");
 		initstatus |= (INITMASK_servo & 0xFFFF);
 	}
-	
+	*/
 	// normalize the target
 	target_ned.normalize();
 	x_axis.normalize();
