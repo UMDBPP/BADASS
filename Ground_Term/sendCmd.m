@@ -11,17 +11,17 @@ function arr = sendCmd(APID,FcnCode,varargin)
 %   4/21/16
 %
 
-    % get streams from base workspace
-    if(~evalin('base','exist(''serConn'',''var'')'))
-        error('sendCmd:serConnDoesntExist','serConn doesn''t exist is base workspace, are you sure the serial connection is open?');
-    end
-    if(~evalin('base','exist(''logfile'',''var'')'))
-        error('sendCmd:logfileDoesntExist','logfile doesn''t exist is base workspace, are you sure the serial connection is open?');
-    end
-    
-    serConn = evalin('base','serConn');
-    logfile = evalin('base','logfile');
-    
+%     % get streams from base workspace
+%     if(~evalin('base','exist(''serConn'',''var'')'))
+%         error('sendCmd:serConnDoesntExist','serConn doesn''t exist is base workspace, are you sure the serial connection is open?');
+%     end
+%     if(~evalin('base','exist(''logfile'',''var'')'))
+%         error('sendCmd:logfileDoesntExist','logfile doesn''t exist is base workspace, are you sure the serial connection is open?');
+%     end
+%     
+%     serConn = evalin('base','serConn');
+%     logfile = evalin('base','logfile');
+%     
     % create the command header
     SeqCnt = 2;
     SegFlag = 3;
@@ -29,6 +29,7 @@ function arr = sendCmd(APID,FcnCode,varargin)
     arr = CreateCmdHdr(APID, SeqCnt, SegFlag, PktLen, FcnCode);
 
     % command definitions
+    CMD_NoOp = hex2dec('00');
     CMD_SetTlmCtrl = hex2dec('01');
     CMD_SetCycTime = hex2dec('02');
     CMD_SetTargetNED = hex2dec('03');
@@ -45,7 +46,7 @@ function arr = sendCmd(APID,FcnCode,varargin)
     uint32_arg = [CMD_SetTlmCtrl CMD_RequestTlmPt];
     uint16_arg = [CMD_SetCycTime];
     uint8_arg = [CMD_SetServoEnable CMD_SetRWEnable CMD_SetElPolarity CMD_SetTlmAddr];
-    no_arg = [CMD_SendTestPkt];
+    no_arg = [CMD_SendTestPkt CMD_NoOp];
     three_float_args = [CMD_SetTargetNED];
     four_float_args = [CMD_SetIMU2BODY];
     tlm_ctrl = [CMD_SetTlmCtrl CMD_RequestTlmPt];
@@ -100,7 +101,7 @@ function arr = sendCmd(APID,FcnCode,varargin)
            error('sendCmd:IncorrectNumberOfFcnArg','Incorrect number of arguments for fcncode %d',FcnCode);
         end
         arr(9) = typecast(uint8(varargin{1}),'uint8');
-        arr(10:13) = typecast(uint8(varargin{2}),'uint32');
+        arr(10:13) = typecast(typecast(varargin{2},'uint32'),'uint8');
     end
     
     
@@ -108,25 +109,27 @@ function arr = sendCmd(APID,FcnCode,varargin)
     arr(5:6) = typecast(swapbytes(uint16(length(arr)-7)),'uint8');
     
     % update the packet checksum
+    class(arr)
+    calcChecksum(arr)
     arr(7) = calcChecksum(arr);
             
     % write the packet
-    fwrite(serConn,arr);
+%     fwrite(serConn,arr);
 
     % log the packet
-    fprintf('S %s: ', datestr(now,'HH:MM:SS.FFF'));
-    fprintf(logfile,'S %s: ', datestr(now,'HH:MM:SS.FFF'));
+%     fprintf('S %s: ', datestr(now,'HH:MM:SS.FFF'));
+%     fprintf(logfile,'S %s: ', datestr(now,'HH:MM:SS.FFF'));
 
     % print the packet to the command line and log file
-    for i=1:length(arr)
-        fprintf('%02s',dec2hex(arr(i)));
-        fprintf(logfile,'%02s',dec2hex(arr(i)));
-        if(i~=length(arr))
-            fprintf(',');
-            fprintf(logfile,',');
-        end
-    end
-    fprintf('\n');
-    fprintf(logfile,'\n');
+%     for i=1:length(arr)
+%         fprintf('%02s',dec2hex(arr(i)));
+%         fprintf(logfile,'%02s',dec2hex(arr(i)));
+%         if(i~=length(arr))
+%             fprintf(',');
+%             fprintf(logfile,',');
+%         end
+%     end
+%     fprintf('\n');
+%     fprintf(logfile,'\n');
     
 end

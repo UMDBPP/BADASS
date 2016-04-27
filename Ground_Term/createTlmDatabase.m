@@ -56,5 +56,6 @@ TLM.msgsent = timeseries('MsgSent');
 TLM.msgrcvd = timeseries('MsgRcvd');
 TLM.mode = timeseries('Mode');
 TLM.LINKCtr = timeseries('LINKCtr');
+TLM.FSWTime = timeseries('FSWTime');
 
 end
