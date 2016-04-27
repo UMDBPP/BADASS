@@ -268,108 +268,48 @@ Will send the data and print the SendCtr and the data sent to the serial.
 
 int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
+  // if the user attempts to send a packet that's too long, don't do it
+  if(payload_size+12 > PKT_MAX_LEN){
+    Serial.println("Packet too long... not sending");
+    return -1;
+  }
+
+  // allocate the buffer to compile the packet in
+  uint8_t _packet_data[PKT_MAX_LEN];
+  uint8_t _payload_size = payload_size;
+  
   // declare the header structures
   CCSDS_PriHdr_t _PriHeader;
   CCSDS_TlmSecHdr_t _TlmSecHeader;
- 
 
-  if(payload_size+12 <= PKT_MAX_LEN){
-    // allocate the buffer to compile the packet in
-    uint8_t _packet_data[PKT_MAX_LEN];
-    uint8_t _payload_size = payload_size;
+  // fill primary header fields
+  CCSDS_WR_APID(_PriHeader,SendAddr);
+  CCSDS_WR_SHDR(_PriHeader,1);
+  CCSDS_WR_TYPE(_PriHeader,0);
+  CCSDS_WR_VERS(_PriHeader,0);
+  CCSDS_WR_SEQ(_PriHeader,_SendCtr);
+  CCSDS_WR_SEQFLG(_PriHeader,0x03);
+  CCSDS_WR_LEN(_PriHeader,payload_size+sizeof(_PriHeader)+sizeof(_TlmSecHeader));
+
+  // fill secondary header fields
+  CCSDS_WR_SEC_HDR_SEC(_TlmSecHeader,millis()/1000L);
+  CCSDS_WR_SEC_HDR_SUBSEC(_TlmSecHeader,millis() % 1000L);
   
-    // fill primary header fields
-    CCSDS_WR_APID(_PriHeader,SendAddr);
-    CCSDS_WR_SHDR(_PriHeader,1);
-    CCSDS_WR_TYPE(_PriHeader,0);
-    CCSDS_WR_VERS(_PriHeader,0);
-    CCSDS_WR_SEQ(_PriHeader,SendCtr);
-    CCSDS_WR_SEQFLG(_PriHeader,0x03);
-    CCSDS_WR_LEN(_PriHeader, payload_size+sizeof(_PriHeader)+sizeof(_TlmSecHeader));
+  // copy the primary header
+  memcpy(_packet_data, &_PriHeader, sizeof(_PriHeader));
+  _payload_size += sizeof(_PriHeader);
 
-    // fill secondary header fields
-    CCSDS_WR_SEC_HDR_SEC(_TlmSecHeader,millis()/1000L);
-    CCSDS_WR_SEC_HDR_SUBSEC(_TlmSecHeader,millis() % 1000L);
-  
-    // copy the primary header
-    memcpy(_packet_data, &_PriHeader, sizeof(_PriHeader));
-    _payload_size += sizeof(_PriHeader);
+  // copy the secondary header
+  memcpy(_packet_data+sizeof(_PriHeader), &_TlmSecHeader, sizeof(_TlmSecHeader));
+  _payload_size += sizeof(_TlmSecHeader);
 
-    // copy the secondary header
-    memcpy(_packet_data+sizeof(_PriHeader), &_TlmSecHeader, sizeof(_TlmSecHeader));
-    _payload_size += sizeof(_TlmSecHeader);
+  // copy the packet data
+  memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), payload, _payload_size);
 
-    // copy the packet data
-    memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), payload, _payload_size);
+  // send the message
+  _sendData(SendAddr, _packet_data, _payload_size);
 
-    // send the message
-    _sendData(SendAddr, _packet_data, _payload_size);
-
-    return 1;
-  }
-  else { // If data is more than 100-12=88 bytes, then break it apart into multiple packets with sequence flag.
-    uint8_t counter = 0; // at this point, the max size of payload is 200, so uint8 is fine for everything. Will eventually be changed
-    uint8_t max_size = PKT_MAX_LEN-12;
-    uint8_t last_tlm_packet = (payload_size/max_size)+1;
-    uint8_t broken_data_packet[max_size];
-
-    for (uint8_t i = 1; i <= last_tlm_packet; i++) { // for each packet that the data is broken into
-      uint8_t _packet_data[PKT_MAX_LEN]; // initialize to zeros for each iteration
-      for (uint8_t i = 0; i < PKT_MAX_LEN; i++) {
-        _packet_data[i] = 0;
-      }
-      uint8_t _payload_size = 0;
-
-      while (counter < max_size*i && counter < payload_size) {
-        broken_data_packet[counter%max_size] = payload[counter];
-        counter++;
-      }
-
-      if (i != last_tlm_packet) { // if not the final packet
-        _payload_size = max_size;
-      }
-      else {
-        _payload_size = (counter%max_size)+1; // counter is zero indexed
-      }
-
-      // fill primary header fields
-      CCSDS_WR_APID(_PriHeader,SendAddr);
-      CCSDS_WR_SHDR(_PriHeader,1);
-      CCSDS_WR_TYPE(_PriHeader,0);
-      CCSDS_WR_VERS(_PriHeader,0);
-      CCSDS_WR_SEQ(_PriHeader,SendCtr);
-      if (i==1) {
-        CCSDS_WR_SEQFLG(_PriHeader,0x01); // First packet is 01
-      }
-      else if (i == last_tlm_packet) {
-        CCSDS_WR_SEQFLG(_PriHeader,0x02); // Last packet is 10
-      }
-      else {
-        CCSDS_WR_SEQFLG(_PriHeader,0x00); // Middle packet is 00
-      }
-      CCSDS_WR_LEN(_PriHeader, payload_size+sizeof(_PriHeader)+sizeof(_TlmSecHeader));
-
-      // fill secondary header fields
-      CCSDS_WR_SEC_HDR_SEC(_TlmSecHeader,millis()/1000L);
-      CCSDS_WR_SEC_HDR_SUBSEC(_TlmSecHeader,millis() % 1000L);
-  
-      // copy the primary header
-      memcpy(_packet_data, &_PriHeader, sizeof(_PriHeader));
-      _payload_size += sizeof(_PriHeader);
-
-      // copy the secondary header
-      memcpy(_packet_data+sizeof(_PriHeader), &_TlmSecHeader, sizeof(_TlmSecHeader));
-      _payload_size += sizeof(_TlmSecHeader);
-
-      // copy the packet data
-      memcpy(_packet_data+sizeof(_PriHeader)+sizeof(_TlmSecHeader), broken_data_packet, _payload_size);
-
-      // send the message
-      _sendData(SendAddr, _packet_data, _payload_size);
-
-      return 1;
-    }
-  }
+  return 1;
 }
 
 
