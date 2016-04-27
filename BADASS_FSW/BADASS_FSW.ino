@@ -19,7 +19,7 @@
 
 // include communication libraries
 #include <XBee.h>
-#include "CCSDS_xbee.h"
+#include "ccsds_xbee.h"
 #include "BADASS_Interface.h"
 
 extern uint32_t _SendCtr;
