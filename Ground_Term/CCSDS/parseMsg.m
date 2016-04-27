@@ -129,15 +129,7 @@ function msg = parseMsg(byte_arr, endianness)
     TLMMask_MsgRcvd =       hex2dec('00800000'); % 2^24
     TLMMask_Mode  =         hex2dec('01000000'); % 2^25
     TLMMask_LINKCtr  =      hex2dec('02000000'); % 2^26
-
-    % // commanding
-    set_tlmctrl_CMD = hex2dec('01');
-    set_cyctime_CMD = hex2dec('02');
-    set_target_ned_CMD = hex2dec('03');
-    set_imu2body_CMD = hex2dec('04');
-    set_servoenable_CMD = hex2dec('05');
-    set_rwenable_CMD = hex2dec('06');
-    set_requesttlm_CMD = hex2dec('07');
+	TLMMask_Time          = hex2dec('04000000'); % 2^27
     
     % initalize to beginning of packet
     data_idx = 1;
@@ -410,6 +402,19 @@ function msg = parseMsg(byte_arr, endianness)
         fprintf('LINKCtr: %d, ',uint32_val);
 
     end
+    
+    % extract time
+    if(bitand(tlmctrl,TLMMask_Time))
+        
+        [uint32_val, data_idx] = extractUint32(pktdata,data_idx,endianness);
+        
+        TLM.FSWTime = addsample(TLM.FSWTime, ...
+            'Data', uint32_val, 'Time', Time);
+        fprintf('FSWTime: %d, ',uint32_val);
+
+    end
+    
+    
     fprintf('\n');
     
     % put the data back into the base workspace
