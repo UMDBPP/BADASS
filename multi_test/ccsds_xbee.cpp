@@ -265,7 +265,7 @@ Will send the data and print the SendCtr and the data sent to the serial.
   Serial.println();
 
 }
-
+uint8_t last_tlm_packet;
 int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
   // declare the header structures
@@ -274,6 +274,7 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
  
 
   if(payload_size+12 <= PKT_MAX_LEN){
+    Serial.print("Sent 1 pkt");
     // allocate the buffer to compile the packet in
     uint8_t _packet_data[PKT_MAX_LEN];
     uint8_t _payload_size = payload_size;
@@ -308,15 +309,21 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
     return 1;
   }
   else { // If data is more than 100-12=88 bytes, then break it apart into multiple packets with sequence flag.
+
     uint8_t counter = 0; // at this point, the max size of payload is 200, so uint8 is fine for everything. Will eventually be changed
     uint8_t max_size = PKT_MAX_LEN-12;
-    uint8_t last_tlm_packet = (payload_size/max_size)+1;
+    last_tlm_packet = (payload_size/max_size)+1;
     uint8_t broken_data_packet[max_size];
 
     for (uint8_t i = 1; i <= last_tlm_packet; i++) { // for each packet that the data is broken into
       uint8_t _packet_data[PKT_MAX_LEN]; // initialize to zeros for each iteration
       uint8_t _payload_size = 0;
-
+      
+      Serial.print("Send pkt ");
+      Serial.print(i);
+      Serial.print(" of ");
+      Serial.println(last_tlm_packet);
+    
       while (counter < max_size*i && counter < payload_size) {
         broken_data_packet[counter%max_size] = payload[counter];
         counter++;
@@ -363,9 +370,15 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
       // send the message
       _sendData(SendAddr, _packet_data, _payload_size);
+      Serial.print("i = ");
+      Serial.println(i);
+      Serial.println("Finished send");
     }
-    return 1;
+             
+ Serial.println("Returning");
+      return 1;
   }
+
 }
 
 
