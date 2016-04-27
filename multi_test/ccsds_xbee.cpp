@@ -315,9 +315,6 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
     for (uint8_t i = 1; i <= last_tlm_packet; i++) { // for each packet that the data is broken into
       uint8_t _packet_data[PKT_MAX_LEN]; // initialize to zeros for each iteration
-      for (uint8_t i = 0; i < PKT_MAX_LEN; i++) {
-        _packet_data[i] = 0;
-      }
       uint8_t _payload_size = 0;
 
       while (counter < max_size*i && counter < payload_size) {
@@ -366,9 +363,8 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
       // send the message
       _sendData(SendAddr, _packet_data, _payload_size);
-
-      return 1;
     }
+    return 1;
   }
 }
 
