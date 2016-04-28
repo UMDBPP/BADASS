@@ -26,7 +26,7 @@ uint32_t _SendCtr = 0;
 uint32_t _RcvdCtr = 0;
 uint32_t _CmdRejCtr = 0;
 
-uint8_t last_tlm_packet = (payload_size/max_size)+1; // This is a variable that is used in sendTlmMsg to keep track of how many packets to send. It failed as a local variable. Possible bug in avr-gcc?
+uint8_t last_tlm_packet; // This is a variable that is used in sendTlmMsg to keep track of how many packets to send. It failed as a local variable. Possible bug in avr-gcc?
 
 
 void printHex(int num, int precision) {
@@ -370,8 +370,8 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
       // send the message
       _sendData(SendAddr, _packet_data, _payload_size);
 
-      return 1;
     }
+    return 1;
   }
 }
 
