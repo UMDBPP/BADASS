@@ -26,6 +26,9 @@ uint32_t _SendCtr = 0;
 uint32_t _RcvdCtr = 0;
 uint32_t _CmdRejCtr = 0;
 
+uint8_t last_tlm_packet = (payload_size/max_size)+1; // This is a variable that is used in sendTlmMsg to keep track of how many packets to send. It failed as a local variable. Possible bug in avr-gcc?
+
+
 void printHex(int num, int precision) {
      char tmp[16];
      char format[20];
@@ -310,8 +313,8 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
   else { // If data is more than 100-12=88 bytes, then break it apart into multiple packets with sequence flag.
     uint8_t counter = 0; // at this point, the max size of payload is 200, so uint8 is fine for everything. Will eventually be changed
     uint8_t max_size = PKT_MAX_LEN-12;
-    uint8_t last_tlm_packet = (payload_size/max_size)+1;
     uint8_t broken_data_packet[max_size];
+    last_tlm_packet = (payload_size/max_size)+1;
 
     for (uint8_t i = 1; i <= last_tlm_packet; i++) { // for each packet that the data is broken into
       uint8_t _packet_data[PKT_MAX_LEN]; // initialize to zeros for each iteration

@@ -25,6 +25,8 @@ int _bytesread;
 uint32_t _SendCtr = 0;
 uint32_t _RcvdCtr = 0;
 uint32_t _CmdRejCtr = 0;
+uint8_t last_tlm_packet; // This variable is used in sendTlmMsg. It didn't work as a local variable. Suspected bug in avr-gcc?
+
 
 void printHex(int num, int precision) {
      char tmp[16];
@@ -265,7 +267,7 @@ Will send the data and print the SendCtr and the data sent to the serial.
   Serial.println();
 
 }
-uint8_t last_tlm_packet;
+
 int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
   // declare the header structures
@@ -312,8 +314,8 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
     uint8_t counter = 0; // at this point, the max size of payload is 200, so uint8 is fine for everything. Will eventually be changed
     uint8_t max_size = PKT_MAX_LEN-12;
-    last_tlm_packet = (payload_size/max_size)+1;
     uint8_t broken_data_packet[max_size];
+    last_tlm_packet = (payload_size/max_size)+1;
 
     for (uint8_t i = 1; i <= last_tlm_packet; i++) { // for each packet that the data is broken into
       uint8_t _packet_data[PKT_MAX_LEN]; // initialize to zeros for each iteration
