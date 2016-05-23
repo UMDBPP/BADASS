@@ -269,6 +269,8 @@ Will send the data and print the SendCtr and the data sent to the serial.
 
 }
 
+uint8_t times_to_send = 0; // why does this work?
+
 int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
 
   // declare the header structures
@@ -308,7 +310,6 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
     // send the message
     _sendData(SendAddr, _packet_data, _payload_size);
 
-    return 1;
   }
   else { // If data is more than 100-12=88 bytes, then break it apart into multiple packets with sequence flag.
     uint8_t counter = 0; // at this point, the max size of payload is 200, so uint8 is fine for everything. Will eventually be changed
@@ -316,19 +317,16 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
     uint8_t broken_data_packet[max_size];
     last_tlm_packet = (payload_size/max_size)+1;
 
-    for (uint8_t i = 1; i <= last_tlm_packet; i++) { // for each packet that the data is broken into
-      uint8_t _packet_data[PKT_MAX_LEN]; // initialize to zeros for each iteration
-      for (uint8_t i = 0; i < PKT_MAX_LEN; i++) {
-        _packet_data[i] = 0;
-      }
+    for (times_to_send = 1; times_to_send <= last_tlm_packet; times_to_send++) { // for each packet that the data is broken into
+      uint8_t _packet_data[PKT_MAX_LEN]; // create array to hold data
       uint8_t _payload_size = 0;
 
-      while (counter < max_size*i && counter < payload_size) {
+      while (counter < max_size*times_to_send && counter < payload_size) {
         broken_data_packet[counter%max_size] = payload[counter];
         counter++;
       }
 
-      if (i != last_tlm_packet) { // if not the final packet
+      if (times_to_send != last_tlm_packet) { // if not the final packet
         _payload_size = max_size;
       }
       else {
@@ -341,10 +339,10 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
       CCSDS_WR_TYPE(_PriHeader,0);
       CCSDS_WR_VERS(_PriHeader,0);
       CCSDS_WR_SEQ(_PriHeader,SendCtr);
-      if (i==1) {
+      if (times_to_send==1) {
         CCSDS_WR_SEQFLG(_PriHeader,0x01); // First packet is 01
       }
-      else if (i == last_tlm_packet) {
+      else if (times_to_send == last_tlm_packet) {
         CCSDS_WR_SEQFLG(_PriHeader,0x02); // Last packet is 10
       }
       else {
@@ -371,8 +369,8 @@ int sendTlmMsg(uint16_t SendAddr, uint8_t payload[], int payload_size){
       _sendData(SendAddr, _packet_data, _payload_size);
 
     }
-    return 1;
   }
+  return 1;
 }
 
 
