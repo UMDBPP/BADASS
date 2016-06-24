@@ -24,7 +24,7 @@ uint16_t XBee_MY_Addr = 0x0002;  // XBee address of this transmitter
 uint16_t XBee_PAN_ID = 0x0B0B; // PAN ID of xbee (must match all xbees)
 
 // List of AP_ID for forwarding data to ground
-uint16_t Transmitted_AP_IDs[NUM_TRANS_APIDS] = {1, 2, 0, 0, 0};
+uint16_t Transmitted_AP_IDs[NUM_TRANS_APIDS] = {1, 2, 3, 4, 5};
 uint8_t Ground_AP_ID = 0x03;
 const uint8_t SyncByte[2] = {0x18, 0x01};
 const uint8_t RespondSyncByte[2] = {0x18, 0x02};
@@ -211,6 +211,7 @@ void xbee2radio(){
        //   it to text characters
        radio_serial.write(Buff_Xbee2900[i]);
        }
+       
     debug_serial.println();
     }
        
@@ -229,18 +230,38 @@ void xbee2radio(){
 }
 
 bool checkpacket(uint8_t _byte_buffer[]){
-// return true if the byte array appears to be a valid packet
-// otherwise false, only call if _byte_buffer is longer than 8 elements
+// return true if the byte array appears to be a valid packet, otherwise false
+// checkpacket() does not check the length of _byte_buffer before casting it... only call if _byte_buffer is longer than 8 elements
+// packets are identified by having a recognized APID, having a secondary header flag set to true, and a version flag set to 0
 
   uint8_t _APID;
   uint8_t _SHDR;
-    
+  uint8_t _VER;
+  
   // assume that this is the beginning of a packet, extract the APID and SHDR flag
   _APID = CCSDS_RD_APID(*(CCSDS_PriHdr_t*) _byte_buffer);
   _SHDR = CCSDS_RD_SHDR(*(CCSDS_PriHdr_t*) _byte_buffer);
+  _VER = CCSDS_RD_VERS(*(CCSDS_PriHdr_t*) _byte_buffer);
 
-  // check if the APID matches and the SHDR is true (which will always be true for our packets)
-  if((_APID == Transmitted_AP_IDs[1] || _APID == Transmitted_AP_IDs[2]) && _SHDR) {
+  // print the values to the serial
+  debug_serial.print("APID :");
+  debug_serial.print(_APID);
+  debug_serial.print(" SHDR :");
+  debug_serial.print(_SHDR);
+  debug_serial.print(" VER :");
+  debug_serial.println(_VER);
+  
+  // check if the APID matches 
+  bool AP_ID_Match = false;
+  for(int i = 0; i < NUM_TRANS_APIDS; i++) {
+    if(_APID == Transmitted_AP_IDs[i]) {
+      AP_ID_Match = true;
+    }
+  }
+
+  // check if all conditions are met
+  if(AP_ID_Match && _SHDR && !_VER) {
+    debug_serial.println("PACKET!");
     return true;
   }
   else{
