@@ -365,14 +365,14 @@ int sendCmdMsg(uint16_t SendAddr, uint8_t fcncode, uint8_t payload[], int payloa
 
 int readMsg(uint16_t timeout){
   
-  // declare the header structures
-  CCSDS_PriHdr_t _PriHeader;
-
   // read a message from the xbee
   _bytesread = _readXbeeMsg(_packet_data, timeout);
         
   if(_bytesread > 0){
-
+    
+    // declare the header structures
+    CCSDS_PriHdr_t _PriHeader;
+    
     // cast the primary header into the header structure
      _PriHeader = *(CCSDS_PriHdr_t*) (_packet_data);
 

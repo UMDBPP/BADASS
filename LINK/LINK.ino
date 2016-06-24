@@ -11,9 +11,9 @@
 #define TLMMask_LINKSendCtr   0x02000000  // 2^26
 
 // alias the serial objects to make it explicit where the output is directed
-HardwareSerial debug_serial = Serial;
-HardwareSerial xbee_serial = Serial3;
-HardwareSerial radio_serial = Serial2;
+#define debug_serial Serial
+#define xbee_serial Serial3
+#define radio_serial Serial2
 
 // define data buffers
 uint8_t Buff_9002XbeeBuf[PKT_MAX_LEN];
@@ -34,6 +34,7 @@ uint8_t err_cnt = 0;
 int APID = 0;
 int PktLen = 0;
 int BytesinBuffer = 0;
+int BytesinBuffer_prev = 0;
 int BytesRead900 = 0;
 int XbeeBytesRead = 0;
 uint32_t _SendCtr = 0;
@@ -133,7 +134,7 @@ void message_response(){
   
   // copy the packet data
   payload_size = addIntToTlm(_SendCtr,_packet_data,payload_size);
-
+  payload_size = addIntToTlm<uint8_t>(0x01,_packet_data,payload_size);
   // send the data
   _SendCtr++;
   
@@ -227,24 +228,19 @@ void xbee2radio(){
   }
 }
 
-bool checkpacket(uint8_t _byte_buffer[], uint8_t _size){
+bool checkpacket(uint8_t _byte_buffer[]){
 // return true if the byte array appears to be a valid packet
-// otherwise false
+// otherwise false, only call if _byte_buffer is longer than 8 elements
 
   uint8_t _APID;
   uint8_t _SHDR;
-  
-  // if the packet isn't long enough, immediate return invalid
-  if(_size < 12){
-    return false;
-  }
-  
+    
   // assume that this is the beginning of a packet, extract the APID and SHDR flag
   _APID = CCSDS_RD_APID(*(CCSDS_PriHdr_t*) _byte_buffer);
   _SHDR = CCSDS_RD_SHDR(*(CCSDS_PriHdr_t*) _byte_buffer);
 
   // check if the APID matches and the SHDR is true (which will always be true for our packets)
-  if((_APID == SyncByte[1] | _APID == SyncByte[2]) & _SHDR) {
+  if((_APID == Transmitted_AP_IDs[1] || _APID == Transmitted_AP_IDs[2]) && _SHDR) {
     return true;
   }
   else{
@@ -262,7 +258,8 @@ void radio2xbee(){
   // if there are enough bytes in the buffer to contain the full packet, send it out on the xbee
   // remove the sent bytes from the buffer by copying the remaining bytes back to the beginning
   // subtract the number of bytes sent from the counter so that it reflects the number of bytes remaining
-
+  BytesinBuffer_prev = BytesinBuffer;
+  
   // Read from 900s append to buffer     
   BytesRead900 = radio_serial.readBytes(Buff_9002XbeeBuf+BytesinBuffer, radio_serial.available());
   
@@ -276,11 +273,12 @@ void radio2xbee(){
   }
   
   // Looking for sync bytes 
-  for(int i=0; i<BytesinBuffer; i++){
+  for(int i=0; i<BytesinBuffer-7; i++){
     
     // see if the packet looks like a valid packet
-    if(checkpacket(Buff_9002XbeeBuf+i, BytesinBuffer-i)){
-
+    if(checkpacket(Buff_9002XbeeBuf+i)){
+      debug_serial.print("i = ");
+      debug_serial.println(i);
       CCSDS_TlmSecHdr_t TlmHeader;
       CCSDS_CmdSecHdr_t CmdHeader;
       CCSDS_PriHdr_t PriHeader;
@@ -298,7 +296,8 @@ void radio2xbee(){
       int PacketLength = CCSDS_RD_LEN(PriHeader);
       // Extract address 
       int APID = CCSDS_RD_APID(PriHeader);
-
+      debug_serial.print("APID found = ");
+      debug_serial.println(APID);
       // If you have a whole packet send it
       if(BytesinBuffer >= PacketLength+i){
 
@@ -306,8 +305,7 @@ void radio2xbee(){
         if(APID == XBee_MY_Addr){
 
           // display debugging info
-          debug_serial.println("debug_serial -> Respond: ");
-          printPktInfo(PriHeader, CmdHeader, TlmHeader);
+          debug_serial.println("radio -> Respond: ");
   
           message_response();
         }
@@ -322,6 +320,10 @@ void radio2xbee(){
           // send the packet over the xbee
           sendData(APID, Buff_9002XbeeBuf+i, PacketLength);
         }
+
+          debug_serial.print("Removing ");
+          debug_serial.print(PacketLength);
+          debug_serial.println(" bytes from buffer.");
         
         // Shift unsent data in the buffer
         memcpy(Buff_9002XbeeBuf, Buff_9002XbeeBuf+i+PacketLength, BytesinBuffer-PacketLength-i);
@@ -331,12 +333,14 @@ void radio2xbee(){
         debug_serial.print(", BytesinBuf: ");
         debug_serial.println(BytesinBuffer);
       }
-     break;
+      break;
     }   
   } 
   // output the number of bytes in the buffer to the debug
-  debug_serial.print(", BytesinBuf: ");
-  debug_serial.println(BytesinBuffer);
+  if(BytesinBuffer != BytesinBuffer_prev){
+    debug_serial.print(", BytesinBuf: ");
+    debug_serial.println(BytesinBuffer);
+  }
 
 }
 
