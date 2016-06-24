@@ -215,19 +215,19 @@ as soon as the xbee loses power!
   atRequest = AtCommandRequest(APCmd, APSetVal, sizeof(APSetVal));   
   STATUS |= sendAtCommand(atRequest) << 6;
   
-  // send a command to read the PAN ID
+  // send a command to set the Coordinator enable
   atRequest = AtCommandRequest(CECmd, CESetVal, sizeof(CESetVal));   
   STATUS |= sendAtCommand(atRequest) << 7;
   
-  // send a command to read the PAN ID
+  // send a command to set the PAN ID
   atRequest = AtCommandRequest(CHCmd, CHSetVal, sizeof(CHSetVal));   
   STATUS |= sendAtCommand(atRequest) << 8;
   
-  // send a command to read the PAN ID
+  // send a command to set the PAN ID
   atRequest = AtCommandRequest(BDCmd, BDSetVal, sizeof(BDSetVal));   
   STATUS |= sendAtCommand(atRequest) << 9;
   
-  // send a command to read the PAN ID
+  // send a command to set the PAN ID
   atRequest = AtCommandRequest(PLCmd, PLSetVal, sizeof(PLSetVal));   
   STATUS |= sendAtCommand(atRequest) << 10;
   

@@ -57,7 +57,7 @@ void setup() {
   radio_serial.begin(9600); 
     
   // initalize xbee
-  int XbeeStatus = InitXBee(XBee_MY_Addr, XBee_PAN_ID, xbee_serial);
+  int XbeeStatus = InitXBee(XBee_MY_Addr, XBee_PAN_ID, Serial3);
   if (!XbeeStatus) {
     debug_serial.println(F("Xbee initialized!"));
   }
