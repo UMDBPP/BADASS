@@ -116,7 +116,7 @@ void message_response(){
   CCSDS_PriHdr_t _PriHeader = *(CCSDS_PriHdr_t*) _packet_data;
   payload_size += sizeof(_PriHeader);
 
-  CCSDS_TlmSecHdr_t _TlmSecHeader = *(CCSDS_TlmSecHdr_t*) _packet_data;       
+  CCSDS_TlmSecHdr_t _TlmSecHeader = *(CCSDS_TlmSecHdr_t*) (_packet_data + sizeof(_PriHeader));       
   payload_size += sizeof(_TlmSecHeader);
 
   // fill primary header fields
@@ -126,8 +126,7 @@ void message_response(){
   CCSDS_WR_VERS(_PriHeader,0);
   CCSDS_WR_SEQ(_PriHeader,_SendCtr);
   CCSDS_WR_SEQFLG(_PriHeader,0x03);
-  CCSDS_WR_LEN(_PriHeader,8+sizeof(_PriHeader)+sizeof(_TlmSecHeader));
-  
+
   // fill secondary header fields
   CCSDS_WR_SEC_HDR_SEC(_TlmSecHeader,millis()/1000L);
   CCSDS_WR_SEC_HDR_SUBSEC(_TlmSecHeader,millis() % 1000L);
@@ -135,8 +134,10 @@ void message_response(){
   // copy the packet data
   payload_size = addIntToTlm(_SendCtr,_packet_data,payload_size);
   payload_size = addIntToTlm<uint8_t>(0x01,_packet_data,payload_size);
-  // send the data
-  _SendCtr++;
+  payload_size = addIntToTlm<uint8_t>(0x02,_packet_data,payload_size);
+ 
+  // fill the packet length field
+  CCSDS_WR_LEN(_PriHeader,payload_size);
   
   // print debug
   debug_serial.print("Sending  ");
@@ -153,6 +154,7 @@ void message_response(){
   }
   debug_serial.println();
 
+  _SendCtr++;
 }
 
 void xbee2radio(){
@@ -270,6 +272,11 @@ void radio2xbee(){
   if(BytesRead900 > 0){
       debug_serial.print("Read :");
       debug_serial.println(BytesRead900);
+
+      for(int i=0; i<BytesinBuffer; i++){ 
+        debug_serial.print(Buff_9002XbeeBuf[i],HEX);
+        debug_serial.print(",");
+      }
   }
   
   // Looking for sync bytes 

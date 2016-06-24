@@ -1,4 +1,4 @@
-function arr = sendCmd2(APID,FcnCode)
+function sendCmd2(APID,FcnCode)
 % SENDCMD
 %
 %   sendCmd(APID,FcnCode)
