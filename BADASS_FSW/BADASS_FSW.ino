@@ -48,6 +48,7 @@ Servo servo1;
 
 // declare the BNO
 Adafruit_BNO055 bno = Adafruit_BNO055(0,0x29);
+Adafruit_BNO055 bno2 = Adafruit_BNO055(1,0x28);
 
 // declare the MCP9808 temperature sensor objects
 Adafruit_MCP9808 tempsensor1 = Adafruit_MCP9808();
@@ -174,6 +175,8 @@ uint16_t xbee_addr = 01;
 uint16_t xbee_PanID = 0x0B0B;
 
 uint8_t sys_cal = 0, gyro_cal = 0, accel_cal = 0, mag_cal = 0;
+uint8_t sys_cal2 = 0, gyro_cal2 = 0, accel_cal2 = 0, mag_cal2 = 0;
+
 uint8_t sys_stat = 0, st_res = 0, sys_err = 0;
 int i = 0;
 float pterr_az = 0.0, pterr_el = 0.0;
@@ -207,7 +210,21 @@ void displaySensorDetails(void)
   Serial.println("");
   delay(500);
 }
-
+void displaySensorDetails2(void)
+{
+  sensor_t sensor;
+  bno2.getSensor(&sensor);
+  Serial.println(F("------------------------------------"));
+  Serial.print  (F("Sensor:       ")); Serial.println(sensor.name);
+  Serial.print  (F("Driver Ver:   ")); Serial.println(sensor.version);
+  Serial.print  (F("Unique ID:    ")); Serial.println(sensor.sensor_id);
+  Serial.print  (F("Max Value:    ")); Serial.print(sensor.max_value); Serial.println(" xxx");
+  Serial.print  (F("Min Value:    ")); Serial.print(sensor.min_value); Serial.println(" xxx");
+  Serial.print  (F("Resolution:   ")); Serial.print(sensor.resolution); Serial.println(" xxx");  
+  Serial.println(F("------------------------------------"));
+  Serial.println("");
+  delay(500);
+}
 static inline int8_t sgn(int val) {
  if (val < 0) return -1;
  if (val==0) return 0;
@@ -906,6 +923,29 @@ void setup() {
 		//bno.setExtCrystalUse(true);
 	}
 
+ Serial.print("Starting BNO2 initialization...");
+ if(!bno2.begin(bno2.OPERATION_MODE_NDOF))
+  {
+    
+    /* There was a problem detecting the BNO055 ... check your connections */
+    Serial.println(" Failed!");
+    
+    initstatus |= (INITMASK_BNO & 0xFFFF);
+  }
+  else{
+    Serial.println(" Initalized!");
+    
+    // set to absolute attitude mode
+    bno2.setMode(Adafruit_BNO055::OPERATION_MODE_NDOF);
+    
+    delay(100);
+    
+    /* Display some basic information on this sensor */
+    displaySensorDetails2();
+    
+    //bno.setExtCrystalUse(true);
+  }
+
 	// the ads does not return a status when started, so we can't 
 	Serial.print("Starting ADS initialization...");
 	ads.begin();
@@ -1071,15 +1111,41 @@ void loop() {
 
 		// get calibration status
 		bno.getCalibration(&sys_cal, &gyro_cal, &accel_cal, &mag_cal);
+    bno2.getCalibration(&sys_cal2, &gyro_cal2, &accel_cal2, &mag_cal2);
+    
+    if(sys_cal2 > sys_cal){
+      // get BNO data 
+      Serial.print("Using BNO2 with cal: ");
+      Serial.println(sys_cal2);
+    }
+    else{
+      Serial.print("Using BNO with cal ");
+      Serial.println(sys_cal);
+    }
 
-		// get BNO data 
-		bno.getEvent(&event);
-
+    if(sys_cal2 > sys_cal){
+		  // get BNO data 
+		  bno2.getEvent(&event);
+    }
+    else{
+      bno.getEvent(&event);
+    }
+    
 		// get euler angles
-		euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-
+    if(sys_cal2 > sys_cal){
+      euler = bno2.getVector(Adafruit_BNO055::VECTOR_EULER);
+    }
+    else{
+      euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+    }
+    
 		// get quaternion
-		quat_ned2imu = bno.getQuat();
+    if(sys_cal2 > sys_cal){
+      quat_ned2imu = bno2.getQuat();
+    }
+    else{
+      quat_ned2imu = bno.getQuat();
+    }
 
 		// form ned2body quaternion
 		quat_ned2body = quat_ned2imu * quat_imu2body;
@@ -1113,7 +1179,14 @@ void loop() {
 
 		// command servo
 		if(ServoEnableFlg){
-			servo1.write(servo_cmd);
+      // if the cal is bad, command back to home
+      if(sys_cal2 == 0 && sys_cal == 0){
+        Serial.println("Cal bad, commanding to home");
+        servo1.write(90);
+      }
+      else{
+        servo1.write(servo_cmd);
+      }
 		}
 
 
