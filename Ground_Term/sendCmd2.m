@@ -42,6 +42,8 @@ function sendCmd2(APID,FcnCode)
 
     % log the packet
     fprintf('S %s: ', datestr(now,'HH:MM:SS.FFF'));
+    fprintf('%X ', arr);
+    fprintf('\n');
     fprintf(logfile,'S %s: ', datestr(now,'HH:MM:SS.FFF'));
 
     % print the packet to the command line and log file

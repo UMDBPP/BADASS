@@ -133,8 +133,6 @@ void message_response(){
   
   // copy the packet data
   payload_size = addIntToTlm(_SendCtr,_packet_data,payload_size);
-  payload_size = addIntToTlm<uint8_t>(0x01,_packet_data,payload_size);
-  payload_size = addIntToTlm<uint8_t>(0x02,_packet_data,payload_size);
  
   // fill the packet length field
   CCSDS_WR_LEN(_PriHeader,payload_size);
@@ -147,7 +145,7 @@ void message_response(){
   // send message
   for(int ii=0; ii < payload_size; ii++){
     radio_serial.write( _packet_data[ii]);
-
+    
     // print packet to debug
     debug_serial.print( _packet_data[ii],HEX);
     debug_serial.print( ", ");
