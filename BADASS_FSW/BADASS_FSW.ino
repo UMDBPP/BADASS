@@ -68,7 +68,7 @@ Adafruit_ADS1015 ads(0x4A);
 #define TLM_ATT 901
 #define TLM_INT 62927874
 
-uint32_t tlmctrl = 2;
+uint32_t tlmctrl = 16761861;
 //uint32_t tlmctrl = 0b0001000000000111;
 
 
@@ -101,7 +101,7 @@ uint16_t desiredHKlogtime = 100; // [ms]
 uint16_t desiredcommtime = 1000; // [ms]
 
 // command the servo
-bool ServoEnableFlg = false;
+bool ServoEnableFlg = true;
 bool El_Cmd_Polarity = true;
 
 uint8_t op_mode = MODE_Auto;
@@ -191,6 +191,7 @@ imu::Vector<3> euler;
 
 imu::Quaternion quat_ned2body;
 imu::Quaternion quat_ned2imu;
+imu::Quaternion quat_ned2imu2;
 
 // ***********************************
 // Functions
@@ -306,6 +307,14 @@ void logData(uint32_t tlmctrl){
     logFile.print(", ");
     logFile.print(mag_cal);
     logFile.print(", ");
+    logFile.print(sys_cal2);
+    logFile.print(", ");
+    logFile.print(gyro_cal2);
+    logFile.print(", ");
+    logFile.print(accel_cal2);
+    logFile.print(", ");
+    logFile.print(mag_cal2);
+    logFile.print(", ");
   }
   
   if(tlmctrl & TLMMask_EulerAng){
@@ -336,6 +345,14 @@ void logData(uint32_t tlmctrl){
     logFile.print(quat_ned2imu.z(), 4);
     logFile.print(", ");
     logFile.print(quat_ned2imu.w(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu2.x(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu2.y(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu2.z(), 4);
+    logFile.print(", ");
+    logFile.print(quat_ned2imu2.w(), 4);
     logFile.print(", ");
   }
   
@@ -1142,6 +1159,7 @@ void loop() {
 		// get quaternion
     if(sys_cal2 > sys_cal){
       quat_ned2imu = bno2.getQuat();
+      quat_ned2imu2 = bno2.getQuat();
     }
     else{
       quat_ned2imu = bno.getQuat();
